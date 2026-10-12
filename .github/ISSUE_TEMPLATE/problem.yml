@@ -1,0 +1,34 @@
+name: Repository problem
+description: Report a concrete documentation or repository problem.
+body:
+  - type: markdown
+    attributes:
+      value: "Planning stage: there is no executable extension yet. Never post credentials, personal profiles or session logs. Use SECURITY.md for private security reports."
+  - type: input
+    id: revision
+    attributes:
+      label: Commit or revision
+      description: The repository revision you checked.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: GitHub, OS and Pi version if relevant; do not include machine paths.
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include the affected file or link, expected result and observed result.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and checked the planning-stage status.
+          required: true
+        - label: I removed private data and this is not a sensitive security report.
+          required: true

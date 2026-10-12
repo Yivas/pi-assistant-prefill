@@ -1,0 +1,25 @@
+name: Proposal
+description: Propose a focused capability or documentation improvement.
+body:
+  - type: markdown
+    attributes:
+      value: "Use synthetic examples only. Do not submit profiles, prompts or conversations from personal sessions. Sensitive reports follow SECURITY.md."
+  - type: textarea
+    id: need
+    attributes:
+      label: Problem and proposed result
+      description: Who needs this, what should change, and what should stay unchanged?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Verification and constraints
+      description: Relevant public API documentation, compatibility limits and how to check the result.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and removed private data.
+          required: true
