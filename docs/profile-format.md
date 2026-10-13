@@ -111,7 +111,7 @@ An unusable catalog (a root error, or more than 100 candidates) blocks every non
 
 An `off` result decides against a new application. It cannot retract examples already sent, and does not remove them from existing history or context retained by the host. Later requests may still contain those examples. This library does not inspect or rewrite sessions.
 
-A `selected` result shows that a profile was resolved. It does not show that a model received it. Applying an example to a session belongs to a later integration step.
+A `selected` result shows that a profile was resolved. It does not show that a model received it. How a selected example is applied to a new session is described in [projection.md](projection.md).
 
 ## Diagnostics
 

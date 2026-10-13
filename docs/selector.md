@@ -1,12 +1,12 @@
 # The `/prefill` command
 
-`/prefill` chooses a profile from the local library, records an explicit disable, shows the recorded state, previews a profile and reloads the catalog. It does not apply the chosen example to a session. Until that phase exists, the command only records a pending choice and says so in every result.
+`/prefill` chooses a profile from the local library, records an explicit disable, shows the recorded state, previews a profile and reloads the catalog. The chosen example is applied to new eligible sessions as described in [projection.md](projection.md). The command itself only records the choice and says so in its result.
 
 ## Status and verification
 
 - The extension source is in this repository. There is no published package and no command that installs it into Pi.
 - The automated suite (`npm run check`) calls the command with a simulated context and a temporary library. It does not start Pi.
-- The structural types in `src/extension-types.ts` were compared by hand with the declarations in `dist/core/extensions/types.d.ts` of Pi 1.1.0. No automated check compares them.
+- The structural types in `src/extension-types.ts` were checked with the TypeScript compiler against the declarations in `dist/core/extensions/types.d.ts` of Pi 1.1.0, from a temporary directory outside the repository, as described in [projection.md](projection.md#verification). That check is not part of `npm run check`.
 - The manual check in [Manual isolated check](#manual-isolated-check) ran on 2026-10-13 (local time) on Windows 10.0.26300 with Node.js v24.9.0 and Pi 1.1.0. That is the only run recorded. No other Pi version, platform or model provider was checked.
 
 ## Subcommands
@@ -16,7 +16,7 @@
 | `/prefill` or `/prefill list` | Lists the valid profiles. In the interactive TUI it opens the host's select dialog with them and an entry that records an explicit disable. |
 | `/prefill use <id>` | Records `<id>` as the pending choice after checking that the catalog has a valid profile with that identifier. |
 | `/prefill off` | Records an explicit disable and clears any pending choice. |
-| `/prefill status` | Shows the pending choice, whether an explicit disable is recorded, the environment disable if any, and that applying the choice is not implemented yet. |
+| `/prefill status` | Shows the pending choice, whether an explicit disable is recorded, the environment disable if any, the application state of the current branch (see [projection.md](projection.md#status)). |
 | `/prefill preview <id>` | Shows the metadata and both message bodies of a profile, escaped. |
 | `/prefill reload` | Reads the catalog and the library configuration again. It applies nothing. |
 
@@ -137,7 +137,7 @@ The state format has its own version, separate from the profile format in [profi
 
 ## Operational size threshold
 
-When a selected profile's user and assistant messages together exceed 16 KiB (16,384 bytes), the selection is still recorded, and the notice reports the size. The threshold is an operational choice of this phase. It is not a limit of Pi, of any model or of any provider. Changing it is a deliberate decision for a later phase.
+When a selected profile's user and assistant messages together exceed 16 KiB (16,384 bytes), the selection is still recorded, and the notice reports the size. The threshold is an operational choice of this phase. It is not a limit of Pi, of any model or of any provider. Changing it is a deliberate decision for a later phase. The threshold only shapes the notice of the selection: the projection applies the profile whatever its size. The application record stores the size it applied (`combinedBytes`), and `/prefill status` shows that size in bytes, so a reader can compare it with 16,384 bytes. Nothing in the projection compares it with the threshold.
 
 ## Presentation escapes
 
@@ -166,4 +166,4 @@ The escape is reversible. A body that literally contains `\u001B` is shown as `\
 - In RPC, prompts sent without waiting for their responses can run out of order. The last completed write wins; each write is atomic.
 - The state is read before each write. Another process that changes `selection.json` between that read and the rename is not detected.
 - Tests that create symbolic links need the Windows privilege to create links (Developer Mode or an equivalent). Without it those tests fail, as [CONTRIBUTING.md](../CONTRIBUTING.md) explains.
-- Applying the pending choice to a session is a later phase. The status output says so.
+- The application was tested with a simulated host only. No real provider has been used; see [projection.md](projection.md#limits-and-what-is-not-verified).

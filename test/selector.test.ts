@@ -252,7 +252,12 @@ describe("executeSelectorCommand: choosing and turning off", () => {
     });
     assert.deepEqual(await runCommand("status", withInvalidEnvironment), {
       kind: "status",
-      status: { pendingProfileId: null, explicitOff: true, environment: "invalid" },
+      status: {
+        pendingProfileId: null,
+        explicitOff: true,
+        environment: "invalid",
+        application: { kind: "indeterminate" },
+      },
     });
   });
 
@@ -281,7 +286,12 @@ describe("executeSelectorCommand: choosing and turning off", () => {
     assert.deepEqual(await runCommand("off", library.options), { kind: "off" });
     assert.deepEqual(await runCommand("status", library.options), {
       kind: "status",
-      status: { pendingProfileId: null, explicitOff: true, environment: "inactive" },
+      status: {
+        pendingProfileId: null,
+        explicitOff: true,
+        environment: "inactive",
+        application: { kind: "indeterminate" },
+      },
     });
   });
 });
@@ -292,7 +302,12 @@ describe("executeSelectorCommand: status", () => {
 
     assert.deepEqual(await runCommand("status", library.options), {
       kind: "status",
-      status: { pendingProfileId: null, explicitOff: false, environment: "inactive" },
+      status: {
+        pendingProfileId: null,
+        explicitOff: false,
+        environment: "inactive",
+        application: { kind: "indeterminate" },
+      },
     });
   });
 
@@ -302,7 +317,12 @@ describe("executeSelectorCommand: status", () => {
 
     assert.deepEqual(await runCommand("status", library.options), {
       kind: "status",
-      status: { pendingProfileId: "brief-example", explicitOff: false, environment: "inactive" },
+      status: {
+        pendingProfileId: "brief-example",
+        explicitOff: false,
+        environment: "inactive",
+        application: { kind: "indeterminate" },
+      },
     });
   });
 
@@ -315,15 +335,30 @@ describe("executeSelectorCommand: status", () => {
 
     assert.deepEqual(await runCommand("status", withEnvironment({ PI_PREFILL_OFF: "1" })), {
       kind: "status",
-      status: { pendingProfileId: null, explicitOff: false, environment: "forced" },
+      status: {
+        pendingProfileId: null,
+        explicitOff: false,
+        environment: "forced",
+        application: { kind: "indeterminate" },
+      },
     });
     assert.deepEqual(await runCommand("status", withEnvironment({ PI_PREFILL_OFF: "yes" })), {
       kind: "status",
-      status: { pendingProfileId: null, explicitOff: false, environment: "invalid" },
+      status: {
+        pendingProfileId: null,
+        explicitOff: false,
+        environment: "invalid",
+        application: { kind: "indeterminate" },
+      },
     });
     assert.deepEqual(await runCommand("status", withEnvironment({ PI_PREFILL_OFF: "0" })), {
       kind: "status",
-      status: { pendingProfileId: null, explicitOff: false, environment: "inactive" },
+      status: {
+        pendingProfileId: null,
+        explicitOff: false,
+        environment: "inactive",
+        application: { kind: "indeterminate" },
+      },
     });
   });
 
@@ -446,6 +481,7 @@ describe("registration", () => {
     const registrations: string[] = [];
     const pi: PiExtensionApi = {
       appendEntry() {},
+      on() {},
       registerCommand(name) {
         registrations.push(name);
       },
@@ -478,6 +514,7 @@ function recordingContext(
   };
   const context: PiCommandContext = {
     mode,
+    sessionManager: { getLeafId: () => null, getBranch: () => [] },
     ui: {
       notify: (message, type) => {
         notices.push({ message, type });
@@ -535,7 +572,8 @@ describe("handlePrefillCommand by mode", () => {
     ]);
     assert.deepEqual(recording.notices, [
       {
-        message: "Selected brief-example. No example is applied to a session yet.",
+        message:
+          "Selected brief-example. The choice is recorded for this agent directory. A session records an application when it starts on a physical Anthropic model with an empty branch, unless PI_PREFILL_OFF is 1.",
         type: "info",
       },
     ]);
@@ -560,6 +598,7 @@ describe("handlePrefillCommand by mode", () => {
           pendingProfileId: null,
           explicitOff: false,
           environment: "inactive",
+          application: { kind: "indeterminate" },
         },
       },
     ]);
@@ -678,7 +717,8 @@ describe("handlePrefillCommand by mode", () => {
 
     assert.deepEqual(recording.notices, [
       {
-        message: "Selected brief-example. No example is applied to a session yet.",
+        message:
+          "Selected brief-example. The choice is recorded for this agent directory. A session records an application when it starts on a physical Anthropic model with an empty branch, unless PI_PREFILL_OFF is 1.",
         type: "info",
       },
     ]);

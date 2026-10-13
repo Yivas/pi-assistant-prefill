@@ -3,6 +3,7 @@ import type { OffEnvironmentState } from "./config.ts";
 import type { PiNoticeType } from "./extension-types.ts";
 import { renderMessage } from "./messages.ts";
 import type { ProfileSummary, SelectorResult, SelectorStatus } from "./selector.ts";
+import type { ApplicationStatus } from "./session-state.ts";
 import { combinedContentBytes, OPERATIONAL_SIZE_LIMIT_BYTES } from "./selector.ts";
 import type { ProfileSnapshot } from "./profiles.ts";
 
@@ -98,6 +99,7 @@ export type SelectorEntry =
       readonly pendingProfileId: string | null;
       readonly explicitOff: boolean;
       readonly environment: OffEnvironmentState;
+      readonly application: ApplicationStatus;
     }
   | { readonly kind: "preview"; readonly profile: EscapedProfile; readonly combinedBytes: number }
   | {
@@ -231,8 +233,39 @@ function renderStatus(status: SelectorStatus): string {
   ];
   if (status.environment === "forced") lines.push(renderMessage("status.environmentForced"));
   if (status.environment === "invalid") lines.push(renderMessage("status.environmentInvalid"));
-  lines.push(renderMessage("status.notApplied"));
+  lines.push(...renderApplication(status.application));
   return lines.join("\n");
+}
+
+// Metadata only: identifiers, the recorded revision, the size and the warm refresh count. The profile
+// text is not part of the status, so no body can reach a notice or a session entry.
+function renderApplication(application: ApplicationStatus): string[] {
+  switch (application.kind) {
+    case "indeterminate":
+      return [renderMessage("status.applicationIndeterminate")];
+    case "none":
+      return [renderMessage("status.applicationNone")];
+    case "invalid":
+      return [renderMessage("status.applicationInvalid")];
+    case "pending":
+    case "committed": {
+      const key =
+        application.kind === "pending"
+          ? "status.applicationPending"
+          : "status.applicationCommitted";
+      const lines = [
+        renderMessage(key, {
+          profileId: application.profileId,
+          applicationId: application.applicationId,
+          revision: application.revision,
+          bytes: application.combinedBytes,
+          refreshes: application.refreshes,
+        }),
+      ];
+      if (application.suspended) lines.push(renderMessage("status.applicationSuspended"));
+      return lines;
+    }
+  }
 }
 
 function renderPreview(profile: ProfileSnapshot): string {

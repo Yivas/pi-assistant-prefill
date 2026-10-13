@@ -10,6 +10,7 @@ import {
 } from "../src/status.ts";
 import { renderMessage } from "../src/messages.ts";
 import type { SelectorResult } from "../src/selector.ts";
+import type { ApplicationStatus } from "../src/session-state.ts";
 
 describe("escapeLabel", () => {
   it("keeps ordinary Unicode text unchanged", () => {
@@ -69,7 +70,12 @@ describe("status text", () => {
   it("reports no pending choice, no explicit off and the unapplied notice", () => {
     const result: SelectorResult = {
       kind: "status",
-      status: { pendingProfileId: null, explicitOff: false, environment: "inactive" },
+      status: {
+        pendingProfileId: null,
+        explicitOff: false,
+        environment: "inactive",
+        application: { kind: "indeterminate" },
+      },
     };
 
     assert.equal(
@@ -77,7 +83,7 @@ describe("status text", () => {
       [
         "Pending choice: none",
         "Explicit off: no",
-        "Applying the choice to a session is not implemented yet. This only records the choice.",
+        "Application state of this branch: not read in this mode.",
       ].join("\n"),
     );
     assert.equal(noticeTypeFor(result), "info");
@@ -86,7 +92,12 @@ describe("status text", () => {
   it("names the pending profile and the environment origin of a disable", () => {
     const result: SelectorResult = {
       kind: "status",
-      status: { pendingProfileId: "brief-example", explicitOff: false, environment: "forced" },
+      status: {
+        pendingProfileId: "brief-example",
+        explicitOff: false,
+        environment: "forced",
+        application: { kind: "indeterminate" },
+      },
     };
 
     assert.equal(
@@ -95,7 +106,7 @@ describe("status text", () => {
         "Pending choice: brief-example",
         "Explicit off: no",
         "Disabled by the environment: PI_PREFILL_OFF is 1.",
-        "Applying the choice to a session is not implemented yet. This only records the choice.",
+        "Application state of this branch: not read in this mode.",
       ].join("\n"),
     );
   });
@@ -103,7 +114,12 @@ describe("status text", () => {
   it("builds the entry from the status fields only, with no body text", () => {
     const entry = renderSelectorEntry({
       kind: "status",
-      status: { pendingProfileId: null, explicitOff: true, environment: "inactive" },
+      status: {
+        pendingProfileId: null,
+        explicitOff: true,
+        environment: "inactive",
+        application: { kind: "indeterminate" },
+      },
     });
 
     assert.deepEqual(entry, {
@@ -111,13 +127,19 @@ describe("status text", () => {
       pendingProfileId: null,
       explicitOff: true,
       environment: "inactive",
+      application: { kind: "indeterminate" },
     });
   });
 
   it("flags an unsupported environment value without echoing it", () => {
     const result: SelectorResult = {
       kind: "status",
-      status: { pendingProfileId: null, explicitOff: false, environment: "invalid" },
+      status: {
+        pendingProfileId: null,
+        explicitOff: false,
+        environment: "invalid",
+        application: { kind: "indeterminate" },
+      },
     };
 
     assert.equal(
@@ -193,7 +215,7 @@ describe("selection notices", () => {
     assert.equal(
       renderSelectorText(result),
       [
-        "Selected big-example. No example is applied to a session yet.",
+        "Selected big-example. The choice is recorded for this agent directory. A session records an application when it starts on a physical Anthropic model with an empty branch, unless PI_PREFILL_OFF is 1.",
         "The combined content is 16386 bytes, above the 16 KiB operational threshold.",
       ].join("\n"),
     );
@@ -370,5 +392,77 @@ describe("escaping is injective", () => {
     const outputs = new Set(spellings.map((text) => escapeBody(text)));
 
     assert.equal(outputs.size, spellings.length);
+  });
+});
+
+describe("application state text", () => {
+  const applicationId = "5c8b2f1e-0a1b-4c2d-8e3f-123456789abc";
+  const revision = "ab".repeat(32);
+  const base = { pendingProfileId: null, explicitOff: false, environment: "inactive" } as const;
+
+  function textWith(application: ApplicationStatus): string {
+    return renderSelectorText({ kind: "status", status: { ...base, application } });
+  }
+
+  it("reports a pending application as not committed, with its metadata", () => {
+    assert.equal(
+      textWith({
+        kind: "pending",
+        applicationId,
+        profileId: "brief-example",
+        revision,
+        combinedBytes: 77,
+        suspended: false,
+        refreshes: 0,
+      }),
+      [
+        "Pending choice: none",
+        "Explicit off: no",
+        `Application not committed yet: brief-example (application ${applicationId}, revision ${revision}, 77 bytes). No completed request carried it. While it stays pending, no new application starts on this branch.`,
+      ].join("\n"),
+    );
+  });
+
+  it("reports a committed application with its refresh count and no suspension line", () => {
+    assert.equal(
+      textWith({
+        kind: "committed",
+        applicationId,
+        profileId: "brief-example",
+        revision,
+        combinedBytes: 77,
+        suspended: false,
+        refreshes: 2,
+      }),
+      [
+        "Pending choice: none",
+        "Explicit off: no",
+        `Application committed in this branch: brief-example was projected into a completed request (application ${applicationId}, revision ${revision}, 77 bytes). Warm refresh decisions counted: 2.`,
+      ].join("\n"),
+    );
+  });
+
+  it("reports an unsupported destination as its own line, apart from the commitment", () => {
+    const text = textWith({
+      kind: "committed",
+      applicationId,
+      profileId: "brief-example",
+      revision,
+      combinedBytes: 77,
+      suspended: true,
+      refreshes: 0,
+    });
+    const lines = text.split("\n");
+    assert.equal(lines.length, 4);
+    assert.match(lines[2] ?? "", /^Application committed in this branch: brief-example /);
+    assert.match(lines[3] ?? "", /^Unsupported destination: /);
+  });
+
+  it("reports an invalid branch and an empty branch", () => {
+    assert.equal(
+      textWith({ kind: "invalid" }).split("\n").at(-1),
+      "Application state of this branch: records unreadable, so no example is projected into it.",
+    );
+    assert.equal(textWith({ kind: "none" }).split("\n").at(-1), "Applied in this branch: none.");
   });
 });

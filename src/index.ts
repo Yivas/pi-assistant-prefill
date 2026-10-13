@@ -5,8 +5,13 @@ import {
   selectionStateDirectory,
 } from "./agent-dir.ts";
 import type { ProfileEnvironment } from "./config.ts";
-import type { PiCommandContext, PiExtensionApi } from "./extension-types.ts";
+import type {
+  PiCommandContext,
+  PiExtensionApi,
+  PiReadonlySessionManager,
+} from "./extension-types.ts";
 import { renderMessage } from "./messages.ts";
+import { PrefixProjection } from "./projection.ts";
 import {
   completeSubcommands,
   executeSelectorCommand,
@@ -19,6 +24,7 @@ import {
   type SelectorResult,
   turnOff,
 } from "./selector.ts";
+import { type ApplicationStatus, INDETERMINATE_APPLICATION } from "./session-state.ts";
 import {
   noticeTypeFor,
   profileOptionLabel,
@@ -35,7 +41,16 @@ export type SelectorOptionsResolution =
   | { readonly kind: "resolved"; readonly options: SelectorOptions }
   | SelectorFailure;
 
+// Reads the application state of the session branch. Without it, status reports the state as
+// indeterminate, which is what the command does when no session is available.
+export type ApplicationDescriber = (sessionManager: PiReadonlySessionManager) => ApplicationStatus;
+
 export default function prefillExtension(pi: PiExtensionApi): void {
+  const projection = new PrefixProjection({
+    resolveOptions: () => resolveSelectorOptions(process.env, os.homedir()),
+    appendEntry: (customType, data) => pi.appendEntry(customType, data),
+  });
+
   pi.registerCommand(COMMAND_NAME, {
     description: "Choose, disable or inspect the local prefill profile",
     getArgumentCompletions: completeSubcommands,
@@ -45,8 +60,21 @@ export default function prefillExtension(pi: PiExtensionApi): void {
         context,
         resolveSelectorOptions(process.env, os.homedir()),
         (customType, data) => pi.appendEntry(customType, data),
+        (sessionManager) => projection.describeApplication(sessionManager),
       ),
   });
+
+  // The handlers never throw for an expected failure: they write a diagnostic entry instead. See
+  // docs/projection.md for the lifecycle each event takes part in.
+  pi.on("session_start", () => projection.reset());
+  pi.on("session_tree", () => projection.reset());
+  pi.on("agent_end", () => projection.endRun());
+  pi.on("before_agent_start", (_event, context) => projection.beginTurn(context));
+  pi.on("context", (event, context) => projection.projectContext(event, context));
+  pi.on("turn_end", (event, context) => projection.endTurnBoundary(event, context));
+  pi.on("cache_warming_decision", (event, context) =>
+    projection.decideCacheWarming(event, context),
+  );
 }
 
 export function resolveSelectorOptions(
@@ -72,6 +100,7 @@ export async function handlePrefillCommand(
   context: PiCommandContext,
   resolution: SelectorOptionsResolution,
   appendEntry: (customType: string, data: unknown) => void,
+  describeApplication: ApplicationDescriber = () => INDETERMINATE_APPLICATION,
 ): Promise<void> {
   // Print mode has no result channel that can report a failure, so no operation runs.
   if (context.mode === "print") return;
@@ -83,10 +112,24 @@ export async function handlePrefillCommand(
   const { options } = resolution;
   const parsed = parseSelectorText(argumentText);
   if (context.mode === "tui") {
-    await handleInteractive(parsed, context, options);
+    await handleInteractive(parsed, context, options, describeApplication);
     return;
   }
-  publish(context, appendEntry, await executeSelectorCommand(parsed, options));
+  const result = await executeSelectorCommand(parsed, options);
+  publish(context, appendEntry, withApplication(result, context, describeApplication));
+}
+
+// Only `status` reports the application state; every other result passes through unchanged.
+function withApplication(
+  result: SelectorResult,
+  context: PiCommandContext,
+  describeApplication: ApplicationDescriber,
+): SelectorResult {
+  if (result.kind !== "status") return result;
+  return {
+    kind: "status",
+    status: { ...result.status, application: describeApplication(context.sessionManager) },
+  };
 }
 
 // The tui has no entry channel, so it only gets the notice. rpc and json also record the result.
@@ -103,6 +146,7 @@ async function handleInteractive(
   parsed: ParsedSelectorText,
   context: PiCommandContext,
   options: SelectorOptions,
+  describeApplication: ApplicationDescriber,
 ): Promise<void> {
   const isBareList =
     parsed.kind === "parsed" && parsed.command === "list" && parsed.argument === "";
@@ -110,7 +154,11 @@ async function handleInteractive(
     await chooseProfile(context, options);
     return;
   }
-  const result = await executeSelectorCommand(parsed, options);
+  const result = withApplication(
+    await executeSelectorCommand(parsed, options),
+    context,
+    describeApplication,
+  );
   context.ui.notify(renderSelectorText(result), noticeTypeFor(result));
 }
 

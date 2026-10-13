@@ -44,10 +44,20 @@ export function briefFiles(id: string): ProfileFiles {
   };
 }
 
+// On Windows a file replaced by rename can stay in "delete pending" while another process holds a
+// handle to it. rmdir then fails with ENOTEMPTY although readdir no longer lists the file. Node retries
+// that error only when maxRetries is set (its default is 0), so the cleanup retries for a short while.
+const TEMPORARY_DIRECTORY_CLEANUP = {
+  recursive: true,
+  force: true,
+  maxRetries: 10,
+  retryDelay: 50,
+} as const;
+
 // Creates a fresh temporary base directory per test; `prefills` is the library root.
 export async function createLibraryFixture(t: TestContext): Promise<LibraryFixture> {
   const base = await mkdtemp(join(tmpdir(), "pi-prefill-test-"));
-  t.after(() => rm(base, { recursive: true, force: true }));
+  t.after(() => rm(base, TEMPORARY_DIRECTORY_CLEANUP));
   const root = join(base, "prefills");
   await mkdir(root);
   return { base, root };

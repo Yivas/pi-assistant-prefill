@@ -1,6 +1,6 @@
 # Contributing
 
-Issues and pull requests are welcome. The repository contains the source of a Pi extension with the `/prefill` command, its profile library and its documentation in [docs/selector.md](docs/selector.md). There is no published package. The structural types match the Pi 1.1.0 declarations, checked by hand; the automated suite does not start Pi. The one manual run recorded is against Pi 1.1.0 on Windows with Node.js 24.9.0, as described in the manual check section of that document.
+Issues and pull requests are welcome. The repository contains the source of a Pi extension with the `/prefill` command, its profile library and its documentation in [docs/selector.md](docs/selector.md). There is no published package. The structural types match the Pi 1.1.0 declarations as checked with the TypeScript compiler from a temporary directory (see [docs/projection.md](docs/projection.md)), which is not part of `npm run check`; the automated suite does not start Pi. The one manual run recorded is against Pi 1.1.0 on Windows with Node.js 24.9.0, as described in the manual check section of that document.
 
 Use the issue forms for a concrete problem or proposal. Search existing issues first. Describe the affected repository revision, your goal, expected result and what you observed. For implementation proposals, explain the public Pi API you would use and how its behavior could be checked; do not claim compatibility without evidence.
 

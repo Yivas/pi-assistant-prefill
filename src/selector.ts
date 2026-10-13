@@ -14,6 +14,7 @@ import {
   type ProfileSnapshot,
 } from "./profiles.ts";
 import { readSelection, type SelectionChoice, saveSelection } from "./selection.ts";
+import { type ApplicationStatus, INDETERMINATE_APPLICATION } from "./session-state.ts";
 
 export const SELECTOR_COMMANDS = ["list", "use", "off", "status", "preview", "reload"] as const;
 export type SelectorCommand = (typeof SELECTOR_COMMANDS)[number];
@@ -34,10 +35,13 @@ export interface ProfileSummary {
   readonly description: string;
 }
 
+// The application state is read from the session branch by the command handler. The selector
+// itself has no session, so it reports the state as indeterminate.
 export interface SelectorStatus {
   readonly pendingProfileId: string | null;
   readonly explicitOff: boolean;
   readonly environment: OffEnvironmentState;
+  readonly application: ApplicationStatus;
 }
 
 export interface SelectorFailure {
@@ -181,6 +185,7 @@ async function readStatus(options: SelectorOptions): Promise<SelectorResult> {
       pendingProfileId: choice.kind === "profile" ? choice.profileId : null,
       explicitOff: choice.kind === "off",
       environment: readOffEnvironment(options.environment),
+      application: INDETERMINATE_APPLICATION,
     },
   };
 }
