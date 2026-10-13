@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { renderMessage } from "../src/messages.ts";
+import type { SelectorResult } from "../src/selector.ts";
+import type { ApplicationStatus } from "../src/session-state.ts";
 import {
   escapeBody,
   escapeLabel,
@@ -8,9 +11,6 @@ import {
   renderSelectorEntry,
   renderSelectorText,
 } from "../src/status.ts";
-import { renderMessage } from "../src/messages.ts";
-import type { SelectorResult } from "../src/selector.ts";
-import type { ApplicationStatus } from "../src/session-state.ts";
 
 describe("escapeLabel", () => {
   it("keeps ordinary Unicode text unchanged", () => {

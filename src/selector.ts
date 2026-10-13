@@ -5,8 +5,8 @@ import {
   type ProfileEnvironment,
   readOffEnvironment,
 } from "./config.ts";
-import type { PiArgumentCompletion } from "./extension-types.ts";
 import { type ProfileDiagnostic, ProfileFailure, toDiagnostic } from "./diagnostic.ts";
+import type { PiArgumentCompletion } from "./extension-types.ts";
 import {
   isProfileId,
   loadProfileCatalog,

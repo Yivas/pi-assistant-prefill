@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs, { type FileHandle } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, it, type TestContext } from "node:test";
-import { readSelection, saveSelection, SELECTION_FILE_NAME } from "../src/selection.ts";
+import { readSelection, SELECTION_FILE_NAME, saveSelection } from "../src/selection.ts";
 import { createLibraryFixture, linkFile } from "./library-fixture.ts";
 
 const PROFILE_STATE =

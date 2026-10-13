@@ -5,7 +5,7 @@
 // request until it is stopped. With --input-tokens N it reports N input tokens in the usage of every
 // answer; the default is 1. That number is synthetic: it only feeds Pi's own cost and size logic.
 // It listens on 127.0.0.1 only and never forwards a request anywhere.
-import { mkdirSync, writeFileSync, appendFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, it, type TestContext } from "node:test";
-import type { SelectorOptions } from "../src/selector.ts";
 import type {
   PiBoundaryDraft,
   PiCustomEntryDraft,
@@ -16,6 +15,7 @@ import type {
 import prefillExtension from "../src/index.ts";
 import { PrefixProjection } from "../src/projection.ts";
 import { saveSelection } from "../src/selection.ts";
+import type { SelectorOptions } from "../src/selector.ts";
 import {
   APPLICATION_ENTRY_TYPE,
   DIAGNOSTIC_ENTRY_TYPE,

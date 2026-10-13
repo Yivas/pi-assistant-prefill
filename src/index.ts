@@ -18,10 +18,10 @@ import {
   listProfiles,
   type ParsedSelectorText,
   parseSelectorText,
-  selectProfile,
   type SelectorFailure,
   type SelectorOptions,
   type SelectorResult,
+  selectProfile,
   turnOff,
 } from "./selector.ts";
 import { type ApplicationStatus, INDETERMINATE_APPLICATION } from "./session-state.ts";

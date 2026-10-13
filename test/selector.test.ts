@@ -11,24 +11,24 @@ import type {
 } from "../src/extension-types.ts";
 import prefillExtension, {
   handlePrefillCommand,
-  type SelectorOptionsResolution,
   SELECTOR_ENTRY_TYPE,
+  type SelectorOptionsResolution,
 } from "../src/index.ts";
+import { readSelection } from "../src/selection.ts";
 import {
   completeSubcommands,
   executeSelectorCommand,
   parseSelectorText,
   type SelectorOptions,
 } from "../src/selector.ts";
-import { readSelection } from "../src/selection.ts";
 import {
   BRIEF_DESCRIPTION,
   BRIEF_NAME,
   briefManifest,
   createLibraryFixture,
-  type ProfileFiles,
   externalCallRecorder,
   fileSystemCallRecorder,
+  type ProfileFiles,
   snapshotTree,
   writeProfile,
   writeRootFile,

@@ -1,11 +1,11 @@
-import type { ProfileDiagnostic } from "./diagnostic.ts";
 import type { OffEnvironmentState } from "./config.ts";
+import type { ProfileDiagnostic } from "./diagnostic.ts";
 import type { PiNoticeType } from "./extension-types.ts";
 import { renderMessage } from "./messages.ts";
-import type { ProfileSummary, SelectorResult, SelectorStatus } from "./selector.ts";
-import type { ApplicationStatus } from "./session-state.ts";
-import { combinedContentBytes, OPERATIONAL_SIZE_LIMIT_BYTES } from "./selector.ts";
 import type { ProfileSnapshot } from "./profiles.ts";
+import type { ProfileSummary, SelectorResult, SelectorStatus } from "./selector.ts";
+import { combinedContentBytes, OPERATIONAL_SIZE_LIMIT_BYTES } from "./selector.ts";
+import type { ApplicationStatus } from "./session-state.ts";
 
 // Presentation escapes: line and paragraph separators and the Unicode bidirectional controls
 // would break lines or reorder text on screen, so they are shown as \uXXXX notation.

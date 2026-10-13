@@ -2,8 +2,6 @@ import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { resolveProfile } from "./config.ts";
 import { type ProfileDiagnostic, ProfileFailure } from "./diagnostic.ts";
-import { decodeUtf8, readRegularFileWithin, resolveRootDirectory } from "./file-read.ts";
-import type { SelectorOptionsResolution } from "./index.ts";
 import type {
   PiAssistantMessage,
   PiBoundaryDraft,
@@ -21,8 +19,10 @@ import type {
   PiUsage,
   PiUserMessage,
 } from "./extension-types.ts";
-import type { SelectorOptions } from "./selector.ts";
+import { decodeUtf8, readRegularFileWithin, resolveRootDirectory } from "./file-read.ts";
+import type { SelectorOptionsResolution } from "./index.ts";
 import { readSelection } from "./selection.ts";
+import type { SelectorOptions } from "./selector.ts";
 import {
   APPLICATION_ENTRY_TYPE,
   type ApplicationRecord,
