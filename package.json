@@ -1,7 +1,38 @@
 {
   "name": "pi-assistant-prefill",
-  "private": true,
+  "version": "0.1.0",
+  "description": "Selectable conversation examples for Pi: choose a local profile and apply it to a new eligible session.",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "prompt",
+    "profile",
+    "conversation-example"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Yivas/pi-assistant-prefill.git"
+  },
   "type": "module",
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "files": [
+    "src",
+    "resources",
+    "schema",
+    "tsconfig.json",
+    "README.md",
+    "LICENSE",
+    "SECURITY.md",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "docs",
+    "CHANGELOG.md"
+  ],
   "scripts": {
     "test": "node --test test/profiles.test.ts test/config.test.ts test/agent-dir.test.ts test/selection.test.ts test/selector.test.ts test/status.test.ts test/session-state.test.ts test/projection.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
