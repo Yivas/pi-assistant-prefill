@@ -4,7 +4,7 @@
 
 ## Status and verification
 
-- The extension source is in this repository. There is no published package and no command that installs it into Pi.
+- The extension source is in this repository and ships in the published package `pi-assistant-prefill`, installed with `pi install npm:pi-assistant-prefill@0.1.0`.
 - The automated suite (`npm run check`) calls the command with a simulated context and a temporary library. It does not start Pi.
 - The structural types in `src/extension-types.ts` were checked with the TypeScript compiler against the declarations in `dist/core/extensions/types.d.ts` of Pi 1.1.0, from a temporary directory outside the repository, as described in [projection.md](projection.md#verification). That check is not part of `npm run check`.
 - The manual check in [Manual isolated check](#manual-isolated-check) ran on 2026-10-13 (local time) on Windows 10.0.26300 with Node.js v24.9.0 and Pi 1.1.0. That is the only run recorded. No other Pi version, platform or model provider was checked.
