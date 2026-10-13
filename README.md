@@ -1,8 +1,10 @@
 # pi-assistant-prefill
 
-A planned Pi extension for selecting editable conversation examples, including assistant-role messages where supported.
+A Pi extension for selecting editable conversation examples, including assistant-role messages where supported.
 
-**Status: profile library implemented, extension not implemented.** The repository contains a TypeScript library that reads and validates local profile files and resolves the selected example. It is not a Pi extension yet: it registers no command, changes no session and has no published package, installation command or verified Pi or provider compatibility. The file format and resolution rules are in [docs/profile-format.md](docs/profile-format.md).
+**Status: source of a Pi extension with the `/prefill` command; no published package.** The repository contains the TypeScript source of the extension, the profile library it reads and the command documentation in [docs/selector.md](docs/selector.md). The command lists profiles, records a choice or an explicit disable, shows the recorded state, previews a profile and reloads the catalog. It does not apply the chosen example to a session yet, and it changes no profile file or library configuration.
+
+There is no published package and no command that installs the extension into Pi. The automated tests call the command with a simulated context and do not start Pi. The structural types match the Pi 1.1.0 declarations, checked by hand. One manual run against an installed Pi 1.1.0 on Windows with Node.js 24.9.0 is described in [docs/selector.md](docs/selector.md); no other Pi version, platform or model provider was checked. The file format and resolution rules are in [docs/profile-format.md](docs/profile-format.md).
 
 ## Scope
 

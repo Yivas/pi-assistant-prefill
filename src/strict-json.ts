@@ -5,7 +5,10 @@ export const MAX_JSON_DOCUMENT_BYTES = 8192;
 
 const SCHEMA_VERSION = 1;
 
-export type JsonDocumentCategory = Extract<ProfileDiagnosticCategory, "manifest" | "configuration">;
+export type JsonDocumentCategory = Extract<
+  ProfileDiagnosticCategory,
+  "manifest" | "configuration" | "selection"
+>;
 
 export type JsonObject = Record<string, unknown>;
 
@@ -33,12 +36,17 @@ export function requireKnownFields(
   }
 }
 
-export function requireSchemaVersion(object: JsonObject, category: JsonDocumentCategory): void {
+// Each document format owns its version; the selection state passes its own.
+export function requireSchemaVersion(
+  object: JsonObject,
+  category: JsonDocumentCategory,
+  supportedVersion = SCHEMA_VERSION,
+): void {
   if (!Object.hasOwn(object, "schemaVersion")) throw new ProfileFailure(category, "missing-field");
   if (typeof object.schemaVersion !== "number") {
     throw new ProfileFailure(category, "invalid-field");
   }
-  if (object.schemaVersion !== SCHEMA_VERSION) {
+  if (object.schemaVersion !== supportedVersion) {
     throw new ProfileFailure(category, "unsupported-schema-version");
   }
 }

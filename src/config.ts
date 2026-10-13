@@ -119,11 +119,11 @@ export async function resolveProfile(options: ResolveProfileOptions): Promise<Pr
   return { status: "selected", source: "default", profile };
 }
 
-type OffEnvironmentState = "forced" | "invalid" | "inactive";
+export type OffEnvironmentState = "forced" | "invalid" | "inactive";
 
 // Only "1" forces off. Unset, empty and "0" leave it inactive; anything else is an error that
 // blocks new selections but still lets an explicit off decision through.
-function readOffEnvironment(environment: ProfileEnvironment): OffEnvironmentState {
+export function readOffEnvironment(environment: ProfileEnvironment): OffEnvironmentState {
   const value = environment[PROFILE_OFF_ENVIRONMENT_VARIABLE];
   if (value === undefined || value === "" || value === "0") return "inactive";
   return value === "1" ? "forced" : "invalid";

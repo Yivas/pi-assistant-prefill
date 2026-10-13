@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test/profiles.test.ts test/config.test.ts",
+    "test": "node --test test/profiles.test.ts test/config.test.ts test/agent-dir.test.ts test/selection.test.ts test/selector.test.ts test/status.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "biome lint .",
     "format:check": "biome format .",

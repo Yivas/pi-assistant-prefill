@@ -2,7 +2,7 @@
 
 This document describes the version 1 profile library and configuration that the `src/` modules read. It covers only loading and resolution. Nothing here writes profiles, edits configuration, registers a Pi extension, sends a request, or runs a process.
 
-Status: implemented as a library with tests. There is no executable Pi extension, no published package, and no verified compatibility with a Pi version or model provider.
+Status: implemented as a library with tests and read by the `/prefill` command (see [selector.md](selector.md)). There is no published package. The command's automated tests do not start Pi; one manual run against Pi 1.1.0 on Windows with Node.js 24.9.0 is described in [selector.md](selector.md). No model provider was tested.
 
 All examples use synthetic data. The `brief-example` profile below is a placeholder, not a model prompt or a recommended example.
 
