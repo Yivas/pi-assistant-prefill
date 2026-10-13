@@ -8,11 +8,11 @@ This page records what has actually been checked, with what, and what remains un
 | --- | --- |
 | Pi | 1.1.0, installed from npm |
 | Node.js | 24.9.0 |
-| Platform | Windows 10.0.26300, Git Bash for the shell scripts |
+| Platform | Windows 10.0.26300 with Git Bash for the manual checks. The automated suite also runs in GitHub Actions on `ubuntu-latest` and `windows-latest` |
 | Providers | None. All checks use the manual harness with a local double, or no provider at all |
 | Credentials | None. No real key is read, written or sent |
 
-No other Pi version, Node version, platform or model provider has been checked. Nothing here shows how a real model provider responds.
+No other Pi version, Node version or model provider has been checked. The manual checks were run on Windows only; the automated suite also passes on Linux in continuous integration. Nothing here shows how a real model provider responds.
 
 ## How each kind of evidence was produced
 
