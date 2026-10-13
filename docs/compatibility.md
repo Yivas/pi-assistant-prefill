@@ -72,4 +72,14 @@ PI_CODING_AGENT_DIR=<temporary directory> \
   --session <temporary session> "<one short benign prompt>"
 ```
 
-Expected, and to be recorded as a sanitized conclusion only: the session starts, one request is sent, the answer arrives, and the recorded state says the application was committed. No contention about the provider's acceptance of the pair may be claimed from the local harness: it only proves what the double received.
+Limits to agree before that call, proposed as defaults:
+
+- one request and no retries;
+- tools disabled for the run;
+- cache warming off, set only in the temporary agent directory and never in the operator's settings;
+- one short benign prompt that asks for a short answer, so cost stays inside the agreed bound;
+- a per-request timeout and a total limit for the run;
+- the session and the agent directory inside a temporary directory, and the provider's own credentials used only through the host mechanism, never copied;
+- only the sanitized conclusion is recorded: whether the session started, whether one answer arrived, and what the recorded state says. Error text, headers and payloads are not kept.
+
+Expected: the session starts, one request is sent, the answer arrives, and the recorded state says the application was committed. The local harness cannot be used to claim that a provider accepted the pair: it only proves what the double received.
