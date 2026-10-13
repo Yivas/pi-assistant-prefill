@@ -1,0 +1,17 @@
+{
+  "name": "pi-assistant-prefill",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/profiles.test.ts test/config.test.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "biome lint .",
+    "format:check": "biome format .",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2"
+  }
+}

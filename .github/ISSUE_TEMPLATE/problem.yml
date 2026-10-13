@@ -1,9 +1,9 @@
 name: Repository problem
-description: Report a concrete documentation or repository problem.
+description: Report a concrete problem in the documentation, the profile library or the repository.
 body:
   - type: markdown
     attributes:
-      value: "Planning stage: there is no executable extension yet. Never post credentials, personal profiles or session logs. Use SECURITY.md for private security reports."
+      value: "The repository is a library in development; there is no executable Pi extension yet. Never post credentials, personal profiles or session logs. Use SECURITY.md for private security reports."
   - type: input
     id: revision
     attributes:
@@ -28,7 +28,7 @@ body:
     attributes:
       label: Before submitting
       options:
-        - label: I searched existing issues and checked the planning-stage status.
+        - label: I searched existing issues and checked the status described in README.md.
           required: true
         - label: I removed private data and this is not a sensitive security report.
           required: true

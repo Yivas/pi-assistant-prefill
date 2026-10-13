@@ -2,13 +2,13 @@
 
 A planned Pi extension for selecting editable conversation examples, including assistant-role messages where supported.
 
-**Status: planning only.** This repository contains project policies, not an executable extension. There is no package, installation command or verified compatibility claim yet.
+**Status: profile library implemented, extension not implemented.** The repository contains a TypeScript library that reads and validates local profile files and resolves the selected example. It is not a Pi extension yet: it registers no command, changes no session and has no published package, installation command or verified Pi or provider compatibility. The file format and resolution rules are in [docs/profile-format.md](docs/profile-format.md).
 
 ## Scope
 
 The intended workflow is to choose a local profile, start an eligible new session and see which example was applied. It will remain separate from Pi's system prompt and authentication. Assistant-role examples are supplied by the operator; they are not proof of a model's prior output and do not guarantee a particular response.
 
-Personal profiles and conversation logs do not belong in this repository. No example content is distributed at this stage.
+Personal profiles and conversation logs do not belong in this repository. No bundled runtime profiles are distributed; synthetic examples appear only in documentation and tests.
 
 ## Participation
 

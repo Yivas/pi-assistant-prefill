@@ -4,7 +4,7 @@
 
 | Line | Support |
 | --- | --- |
-| Planning-stage repository | Documentation and repository configuration reports only |
+| Repository before any release | Documentation, repository configuration and the profile library reports |
 | Executable releases | None published |
 
 There is no extension to run yet. Do not install another package on the assumption that it is this project.
