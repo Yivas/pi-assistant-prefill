@@ -158,6 +158,9 @@ The result recorded for Pi 1.1.0 is exit code 0. A negative control, one handler
 
 ## Limits
 
+- The profile pair travels in the request that applies it and in every later request of that branch, so its whole text is sent again on each turn. A large profile costs that content every time, and the recorded size in bytes is what the state shows.
+- Whether Pi's own usage and context display counts the injected messages was not checked. Do not read those figures as proof that the example is or is not counted.
+- The 16 KiB figure is a selection-time advisory only: choosing a profile above it reports the size, and the projection records the applied size, but nothing enforces the threshold.
 - No real provider was used. The behavior described here is tested with a host double.
 - Only Pi 1.1.0 was read and checked. Other versions are not checked.
 - The Anthropic rule checks the provider label and the API, not the endpoint (see [Compatibility](#compatibility)).
