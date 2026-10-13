@@ -129,6 +129,39 @@ The rendered page is not part of the automated check. Run these steps by hand:
 
 Not run for the recorded results below.
 
+### JSONL export (interactive only, executed)
+
+The command `/export <file>.jsonl` exists only in the interactive mode. Neither `pi --export` nor RPC runs it, and the automated suite does not run it. It was executed by hand on Windows through a pseudo-terminal, and these are the steps:
+
+1. Start a session with the local double: point the isolated `models.json` at a running `anthropic-double.mjs`, set `PI_CODING_AGENT_DIR`, `HOME` and `USERPROFILE` inside a temporary directory, and start Pi in the terminal UI with the extension loaded:
+
+   ```sh
+   node <cli.js> --tui-mode regular -ne -e <repo>/src/index.ts -nc -ns -np --no-mcp --offline -na      --provider anthropic --model claude-sonnet-4-6 --session <work>/live.jsonl
+   ```
+
+2. Send one prompt, for example `SYNTHETIC-REAL-PROMPT: summarize the previous answer.`, and wait for the answer.
+3. Type `/export <work>/session.jsonl` and press Enter. Expected notice: `Session exported to: <work>/session.jsonl`. Then type `/quit`.
+
+Observed: the export file held nine entries, the same content as the live session file. The profile pair was absent, as the contract requires, and the three application records were present with the phases `intent`, `projected` and `committed` under `pi-assistant-prefill.application`. `serializeSessionBranch` rewrites the `parentId` values as a chain, so compare entry identifiers, types and our records, not `parentId`, against the live file.
+
+### Terminal UI rendering
+
+The dialog, its cancellation and the selection were checked in a real terminal UI on Windows through a pseudo-terminal: the dialog listed the profile and the disable entry with the host's navigation hints, Escape left no state, and Enter wrote the selection. Rendering was also checked under the `dark` and `light` themes, and the narrow layout held at the 80 columns the pseudo-terminal provides, with no line wider than the terminal.
+
+Not verified: an explicit 120x35 layout, because the available pseudo-terminal cannot be resized, and colour fidelity, which the captured output does not preserve.
+
+### Rendered export
+
+The rendered page is not part of the automated check. Run these steps by hand:
+
+1. Run `node test/harness/export-session.mjs --pi-entry <cli.js> --work <work>`. It leaves the command-line export at `<work>/export/cli-export.html`.
+2. Open that file in a browser and wait until the page has painted the transcript.
+3. Expected: two user messages, `SYNTHETIC-REAL-PROMPT: summarize the previous answer.` and `SYNTHETIC-REAL-PROMPT-2: summarize the previous answer again.`, each followed by an assistant message that starts with `SYNTHETIC-REPLY from the local double (request`.
+4. Use the browser's find command (Ctrl+F) for `SYNTHETIC-USER-EXAMPLE` and for `SYNTHETIC-ASSISTANT-EXAMPLE`. Expected: 0 matches for each.
+5. Observation, not an expectation: write down how the page shows the application and selection records (`pi-assistant-prefill.application`, `pi-assistant-prefill.selector`), or whether it hides them.
+
+Not run for the recorded results below.
+
 ### JSONL export (interactive only)
 
 The command `/export <file>.jsonl` exists only in the interactive mode. Neither `pi --export` nor RPC runs it, and the harness does not run it. Run these steps by hand, in a terminal:

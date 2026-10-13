@@ -38,7 +38,8 @@ No other Pi version, Node version or model provider has been checked. The manual
 | Literal text | Passed | Profile tests keep bodies literal; presentation escaping has its own tests |
 | Coexistence with Prompt Profiles 0.9.1 | Passed at command level | Both extensions loaded in one isolated Pi; `get_commands` lists `sp` and `prefill` with no error. Visual coexistence in the terminal UI was not checked |
 | Coexistence with real authentication (OAuth) | Not run | No credential is used anywhere in this project. Recipe below |
-| Interface modes | Passed for RPC, JSON and text; partial for the terminal UI | The command was exercised in the three non-interactive modes. In the terminal UI the dialog, cancellation and selection were checked; resizing to 80x24 and 120x35 and switching themes were not |
+| Interface modes | Passed, with one layout gap | The command was exercised in RPC, JSON and text. In the terminal UI the dialog, cancellation and selection were checked, the narrow layout held at the 80 columns the pseudo-terminal provides, and the dialog rendered under the `dark` and `light` themes. An explicit 120x35 layout was not produced and colour fidelity was not judged |
+| JSONL session export | Passed | Driven by hand in the terminal UI through a pseudo-terminal: the exported file held the same entries as the live session, the profile pair was absent and the application records were present |
 | Cache and compaction | Passed | Harness compaction check: a real compaction runs, the pair survives once, the records survive |
 | Cache warming | Passed, with a limit | Harness warming check: a real warm decision, the `cache_warm` entry and a refresh request. The economics are synthetic, so it shows the mechanism and not the cost; the pending-stop branch is only observable in a unit test |
 | Privacy | Passed | Status and debug output carry sizes, identifiers and counts, never profile texts; session export reconstructs the records from embedded data |
@@ -51,8 +52,8 @@ No other Pi version, Node version or model provider has been checked. The manual
 - Automatic compaction triggered by a threshold; the compaction checks trigger it explicitly.
 - Cache warming with real cost, cache hits, or the branch that stops a refresh while an application is pending.
 - Other platforms, Node versions or Pi versions.
-- The statically rendered export page and the interactive-only JSONL export.
-- Terminal UI resizing and themes.
+- The statically rendered export page; the JSONL export itself was verified by hand.
+- An explicit 120x35 terminal layout and colour fidelity.
 
 ## Published channel
 
