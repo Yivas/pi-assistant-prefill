@@ -101,6 +101,18 @@ What it does not show:
 - The rendered page is not checked. The static HTML holds no transcript: the page paints the transcript from the embedded block with JavaScript. The rendered view is a manual step below.
 - The JSONL export is not covered; it is available only from the interactive terminal UI (see below).
 
+### Branch navigation (`branch-navigation.mjs`)
+
+How it runs: a real session against the local double. The script applies the profile on the first branch, navigates to another position of the same session through a disposable probe command that calls the navigation API Pi's own interface uses, and then navigates back. It never emits the session event itself and never restarts between branches.
+
+```sh
+node test/harness/branch-navigation.mjs --pi-entry <cli.js> [--work <dir>]
+```
+
+What it shows: three requests reach the double. The first branch carries the profile pair and the real prompt. The branch reached by navigating starts clean: no entry of the first branch travels into it, and it takes its own application on its own empty branch. Navigating back to the committed position recovers that branch once, with its own earlier turn and a single pair.
+
+What it does not show: the terminal UI's tree picker keys. Navigation was driven through the public API the interface uses, in a real Pi process with the extension loaded, not by pressing keys in the tree view.
+
 ### Pending stop and pending block (unit tests)
 
 `test/projection.test.ts` covers two consequences of a pending application, the state of a branch that was aborted after the projection and holds an intent and a projection but no commitment:

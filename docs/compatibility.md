@@ -26,7 +26,7 @@ No other Pi version, Node version or model provider has been checked. The manual
 | --- | --- | --- |
 | New eligible session | Passed | Harness boundary check: the captured request carries the profile pair first and the real prompt last |
 | Second and later requests of the same branch | Passed | Harness boundary check over two turns; the pair appears once per request |
-| Resume, branch navigation and reload | Passed | Interruption harness restarts a session and reads back its state; unit tests cover branch state derived per branch |
+| Resume, branch navigation and reload | Passed | Interruption harness restarts a session and reads back its state; and a real session navigated from one branch to another and back, with every captured request checked: each branch carries only what belongs to it, a branch reached by navigating starts clean, and returning recovers the committed prefix once. Navigation was driven through Pi's public navigation API in a real session; the terminal tree picker keys were not pressed |
 | Disable by variable and by command, before and after applying | Passed | Unit tests for the variable precedence and the command; that disabling does not retract what was already sent is a documented statement, not a test |
 | Future selection while another profile is applied | Passed | Unit tests: the applied profile stays, the new choice waits |
 | Edit or delete the applied profile and reload the catalog | Passed | Harness negative control: the pair disappears and a `revision-mismatch` diagnostic is written |
