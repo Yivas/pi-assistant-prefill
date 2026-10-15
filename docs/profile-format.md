@@ -2,7 +2,7 @@
 
 This document describes the version 1 profile library, configuration and resolution rules. The TUI menu can create and edit profiles in this format; loading, resolution and all other commands remain read-only in the library. Nothing writes its configuration.
 
-Status: implemented as a library with tests and read by the `/prefill` command (see [selector.md](selector.md)). It ships inside the published package `pi-assistant-prefill`, installed with `pi install npm:pi-assistant-prefill@0.1.0`. The command's automated tests do not start Pi; one manual run against Pi 1.1.0 on Windows with Node.js 24.9.0 is described in [selector.md](selector.md). No model provider was tested.
+Status: implemented as a library with tests and read by the `/prefill` command (see [selector.md](selector.md)). It ships inside the published package `pi-assistant-prefill`, installed with `pi install npm:pi-assistant-prefill@0.1.1`. The command's automated tests do not start Pi; one manual run against Pi 1.1.0 on Windows with Node.js 24.9.0 is described in [selector.md](selector.md). No model provider was tested.
 
 All examples use synthetic data. The `brief-example` profile below is a placeholder, not a model prompt or a recommended example.
 

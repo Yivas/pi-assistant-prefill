@@ -57,7 +57,7 @@ No other Pi version, Node version or model provider has been checked. The manual
 
 ## Published channel
 
-The npm package `pi-assistant-prefill` is published at 0.1.0, and the tarball served by the registry is byte for byte the artifact frozen before publication (`sha256 b75ac3519fba22ab8cc51124d4c360725d4e6c9e932ed26fe68572f8f88b134c`). The GitHub release `v0.1.0` points at commit `be6415a`. Installing it was checked in an isolated agent directory; nothing about a provider was checked through that channel.
+The npm package `pi-assistant-prefill` was first published at 0.1.0, and that tarball served by the registry is byte for byte the artifact frozen before publication (`sha256 b75ac3519fba22ab8cc51124d4c360725d4e6c9e932ed26fe68572f8f88b134c`). The GitHub release `v0.1.0` points at commit `be6415a`. Installing it was checked in an isolated agent directory; nothing about a provider was checked through that channel.
 
 An earlier placeholder version, `0.0.0-stage`, was published while preparing the release and is no longer `latest`. It contains no extension and no licence field, and it is not the artifact described here.
 
