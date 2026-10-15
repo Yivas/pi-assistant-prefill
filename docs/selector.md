@@ -1,13 +1,13 @@
 # The `/prefill` command
 
-`/prefill` chooses a profile from the local library, records an explicit disable, shows the recorded state, previews a profile and reloads the catalog. The chosen example is applied to new eligible sessions as described in [projection.md](projection.md). The command itself only records the choice and says so in its result.
+`/prefill` chooses a profile from the local library, records an explicit disable, shows the recorded state, previews a profile and reloads the catalog. In the TUI, its menu also creates and edits profiles. The chosen example is applied to new eligible sessions as described in [projection.md](projection.md). Choosing only records the choice and says so in its result.
 
 ## Status and verification
 
 - The extension source is in this repository and ships in the published package `pi-assistant-prefill`, installed with `pi install npm:pi-assistant-prefill@0.1.0`.
 - The automated suite (`npm run check`) calls the command with a simulated context and a temporary library. It does not start Pi.
 - The structural types in `src/extension-types.ts` were checked with the TypeScript compiler against the declarations in `dist/core/extensions/types.d.ts` of Pi 1.1.0, from a temporary directory outside the repository, as described in [projection.md](projection.md#verification). That check is not part of `npm run check`.
-- The manual check in [Manual isolated check](#manual-isolated-check) ran on 2026-10-13 (local time) on Windows 10.0.26300 with Node.js v24.9.0 and Pi 1.1.0. A separate TUI check on Pi 1.1.0 rendered the menu with an empty library and a temporary agent directory, including its title, state, folder and all seven actions. Selection through the menu was tested with a simulated context, not in the real TUI. No other Pi version, platform or model provider was checked.
+- The manual check in [Manual isolated check](#manual-isolated-check) ran on 2026-10-13 (local time) on Windows 10.0.26300 with Node.js v24.9.0 and Pi 1.1.0. A TUI check on 2026-10-15 on Windows with Pi 1.1.0 and a temporary agent directory showed the menu's own list, built with `ctx.ui.custom`, with its title, recorded state, library folder, `Search:` line, a description per option and the key hint. Typing `cho` filtered the list, Enter opened the profile dialog, and picking a profile recorded `selection.json`. Create asked for an id, name, description and both example texts, and wrote valid `profile.json`, `user.md` and `assistant.md` files. Edit and Preview opened from the menu were tested with a simulated context only. No other Pi version, platform or model provider was checked.
 
 ## Subcommands
 
@@ -21,7 +21,7 @@
 | `/prefill preview <id>` | Shows the metadata and both message bodies of a profile, escaped. |
 | `/prefill reload` | Reads the catalog and the library configuration again. It applies nothing. |
 
-Nothing sends a message to the model, starts a generation, or writes to the profile library or to `prefills/config.json`.
+No subcommand sends a message to the model, starts a generation, or writes to the profile library or `prefills/config.json`. Only Create and Edit in the TUI menu write profiles; they do not change the configuration.
 
 ## Argument grammar
 
@@ -44,7 +44,7 @@ Completion offers the subcommand names only. Profile identifiers need the catalo
 | `json` | Lists, without a dialog. | Lists, without a dialog. | Runs the subcommand. | Session entry through `pi.appendEntry`, plus `ui.notify` |
 | `print` | Nothing runs. | Nothing runs. | Nothing runs. | None |
 
-In the TUI the filtering of the list belongs to the host's select dialog. This package adds no search of its own. The empty-library menu render was checked in Pi 1.1.0; selection through the menu was tested with a simulated context, not in the real TUI.
+In the TUI the menu has its own searchable list, built with `ctx.ui.custom`; `/prefill list` still uses the host's select dialog. The menu's own list was checked in the real TUI on 2026-10-15, as described in [Status and verification](#status-and-verification).
 
 Failures never throw. In `rpc` and `json` a failure is written as an entry with `kind: "failed"` and a diagnostic, and the notice has type `error`. A thrown error would be caught by the host and reported with exit status 0.
 
@@ -56,7 +56,7 @@ The mode is read from `ctx.mode`. The package does not use `ctx.hasUI` to decide
 
 ## Menu
 
-A bare `/prefill` in the TUI always offers seven actions, even when the library is empty:
+A bare `/prefill` in the TUI always offers these seven actions, even when the library is empty:
 
 - Choose a profile (N available, or none yet)
 - Preview a profile
@@ -66,11 +66,13 @@ A bare `/prefill` in the TUI always offers seven actions, even when the library 
 - How to add a profile
 - Close
 
-The dialog title shows a short summary, the pending choice or recorded disable, the library state (valid profiles and candidates left out, or an unusable library) and the library folder.
+When the host provides input and editor dialogs, the TUI also offers **Create a profile** and **Edit a profile**. Create asks for an id, name, description and both example messages; Edit lets you change the labels or either message, starting from the current value. Cancelling before saving writes nothing. The revision recorded for an application is a digest of the three profile files, so any edit changes it and a session that already applied the profile stops sending the example, even when only the name or the description changed.
+
+The TUI menu uses a custom searchable list with a highlighted title and a muted summary showing the pending choice or recorded disable, the library state and the library folder. If custom UI is unavailable or the menu is called in another mode, it falls back to the host's select dialog.
 
 Choose and Preview open a second dialog with entries in the form `id: name — description`. Its `Back to the menu` entry returns to the main menu. With no valid profiles, either action shows a notice instead of opening a second dialog.
 
-The menu only reads the library; it never writes to it. Choosing a profile or turning prefill off records the choice outside the library, as described in [Recorded state](#recorded-state).
+Only Create and Edit write to the library. They resolve the library root through links, as the reader does, and reject a profile folder that is a link and any write target that is a link. They validate the format and byte limits before writing, replace each file through a temporary file and rename, then reload the catalog to check the result. Creation is not a three-file transaction: a failed or interrupted save may leave a partial profile. Same-user filesystem changes between checks are not prevented. Choosing a profile or turning prefill off records the choice outside the library, as described in [Recorded state](#recorded-state).
 
 ## PI_PREFILL_OFF
 
@@ -175,7 +177,7 @@ The escape is reversible. A body that literally contains `\u001B` is shown as `\
 ## Limits and residual behavior
 
 - Verified only as described in [Status and verification](#status-and-verification).
-- The TUI list has not been run end to end. The filtering and the dialog's behavior belong to the host.
+- Edit and Preview opened from the menu were tested with a simulated context, not in the real TUI. `/prefill list` still uses the host's dialog.
 - After `preview` in RPC or JSON mode, the full escaped body is stored as an entry in the session transcript.
 - A profile with CRLF line endings shows `\u000D` at each line end in a preview, because CR is escaped. The stored text is not changed.
 - Invisible characters that are not bidirectional controls are not escaped: U+200B, U+FEFF, U+2060 to U+2064 and U+00AD. The contract does not require it.

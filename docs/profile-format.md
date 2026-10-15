@@ -1,6 +1,6 @@
 # Profile library format and resolution
 
-This document describes the version 1 profile library and configuration that the `src/` modules read. It covers only loading and resolution. Nothing here writes profiles, edits configuration, registers a Pi extension, sends a request, or runs a process.
+This document describes the version 1 profile library, configuration and resolution rules. The TUI menu can create and edit profiles in this format; loading, resolution and all other commands remain read-only in the library. Nothing writes its configuration.
 
 Status: implemented as a library with tests and read by the `/prefill` command (see [selector.md](selector.md)). It ships inside the published package `pi-assistant-prefill`, installed with `pi install npm:pi-assistant-prefill@0.1.0`. The command's automated tests do not start Pi; one manual run against Pi 1.1.0 on Windows with Node.js 24.9.0 is described in [selector.md](selector.md). No model provider was tested.
 
@@ -123,11 +123,11 @@ A diagnostic has this shape:
 
 For a candidate, `profileId` is set only after its manifest validates; before that, `candidateOrdinal` gives the candidate's position in the sorted scan. Resolution failures set `profileId` to the identifier that was requested or configured, when that identifier is valid. A diagnostic never contains file paths, file names, message text, configuration content, or raw JSON.
 
-Categories: `configuration`, `catalog`, `identity`, `file`, `manifest`, `text`, `size`. There is no `write` category because the library has no writer. The diagnostic types are defined in `src/diagnostic.ts`; the other types are defined in `src/profiles.ts` and `src/config.ts`.
+Reader categories: `configuration`, `catalog`, `identity`, `file`, `manifest`, `text`, `size`. The TUI writer reports validation and write failures separately, and reloads the catalog after saving to report reader diagnostics. The diagnostic types are defined in `src/diagnostic.ts`; the other types are defined in `src/profiles.ts` and `src/config.ts`.
 
 ## Reading guarantees and limits
 
-- The library only reads. Loading and resolving never create, change, or delete files.
+- Loading and resolving never create, change, or delete files. Only Create and Edit in the TUI menu write profiles; see [Menu](selector.md#menu) for write guarantees and limits.
 - Before and after each read, the library compares device, inode, size, and modification time. It rejects a file that changed during the read.
 - Special files (FIFOs, devices, directories) are rejected before the read.
 - The library makes no network request and starts no process.
@@ -161,9 +161,10 @@ const resolution = await resolveProfile({
 | `loadProfileConfig(libraryRoot)` | `src/config.ts` | The configured default identifier, or a configuration failure. |
 | `resolveProfile(options)` | `src/config.ts` | One of `selected`, `off`, `none`, or `failed`. |
 | `PROFILE_OFF_ENVIRONMENT_VARIABLE` | `src/config.ts` | The name `PI_PREFILL_OFF`. |
+| `writeProfile(libraryRoot, request)` | `src/profile-writer.ts` | Creates or edits one profile after validating it, or returns a failure reason as `ProfileWriteResult`. |
 
 The types `ProfileDiagnostic`, `ProfileDiagnosticCategory` and `ProfileDiagnosticCode` are exported from `src/diagnostic.ts`. `ProfileSnapshot` and `ProfileCatalogLoad` are exported from `src/profiles.ts`. `ProfileConfigLoad`, `ProfileChoice`, `ProfileEnvironment`, `ProfileResolution` and `ResolveProfileOptions` are exported from `src/config.ts`. Import each type from its module.
 
 ## Verification
 
-The tests in `test/` use temporary directories and literal expected values. They cover valid and invalid manifests, text encoding and limits, link containment, candidate limits, configuration precedence, environment off, and the absence of writes and external calls. Run them as described in [CONTRIBUTING.md](../CONTRIBUTING.md).
+The tests in `test/` use temporary directories and literal expected values. They cover valid and invalid manifests, text encoding and limits, link containment, candidate limits, configuration precedence, environment off, and the absence of writes and external calls in the reader. The writer has its own tests in `test/selector.test.ts`: they create and edit a catalog-valid profile, and check that a cancelled save and an existing id leave the library unchanged. Run them as described in [CONTRIBUTING.md](../CONTRIBUTING.md).

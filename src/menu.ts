@@ -1,6 +1,8 @@
 import { readOffEnvironment } from "./config.ts";
 import type { PiCommandContext } from "./extension-types.ts";
 import { renderMessage } from "./messages.ts";
+import { createProfile, editProfile } from "./profile-editor.ts";
+import { type MenuChoice, selectMenuItem } from "./search-list.ts";
 import { readSelection } from "./selection.ts";
 import {
   executeSelectorCommand,
@@ -19,14 +21,12 @@ type PickResult = { readonly back: true } | { readonly profileId: string };
 
 type ApplicationDescriber = () => ApplicationStatus;
 
-interface MenuItem {
-  readonly label: string;
+interface MenuItem extends MenuChoice {
   readonly run: () => Promise<void>;
 }
 
-// The menu is the entry point of a bare `/prefill` in the TUI. It always offers every action,
-// including when the library is empty, so the operator can see what the extension does and how
-// to add a profile. It only reads the library: nothing here writes to it.
+// The menu keeps its read and selection actions even when the library is empty.
+// Creation and editing also need the host's input and editor dialogs.
 export async function openMenu(
   context: PiCommandContext,
   options: SelectorOptions,
@@ -37,7 +37,15 @@ export async function openMenu(
   const invalidCount = listing.kind === "list" ? listing.invalidCandidates.length : 0;
 
   const items = new Map<string, MenuItem>();
-  const add = (label: string, run: () => Promise<void>) => items.set(label, { label, run });
+  const add = (key: string, run: () => Promise<void>, parameters = {}) => {
+    const label = renderMessage(`menu.item.${key}`, parameters);
+    items.set(label, {
+      value: label,
+      label,
+      description: renderMessage(`menu.description.${key}`),
+      run,
+    });
+  };
   const notifyResult = (result: SelectorResult) =>
     context.ui.notify(renderSelectorText(result), noticeTypeFor(result));
 
@@ -45,17 +53,21 @@ export async function openMenu(
     profiles.length === 0
       ? renderMessage("menu.count.none")
       : renderMessage("menu.count.some", { count: profiles.length });
-  add(renderMessage("menu.item.choose", { count }), async () => {
-    if (profiles.length === 0) {
-      context.ui.notify(renderMessage("menu.empty"), "info");
-      return;
-    }
-    const chosen = await pickProfile(context, profiles, renderMessage("list.title"));
-    if (chosen === undefined) return;
-    if ("back" in chosen) return openMenu(context, options, describeApplication);
-    notifyResult(await selectProfile(chosen.profileId, options));
-  });
-  add(renderMessage("menu.item.preview"), async () => {
+  add(
+    "choose",
+    async () => {
+      if (profiles.length === 0) {
+        context.ui.notify(renderMessage("menu.empty"), "info");
+        return;
+      }
+      const chosen = await pickProfile(context, profiles, renderMessage("list.title"));
+      if (chosen === undefined) return;
+      if ("back" in chosen) return openMenu(context, options, describeApplication);
+      notifyResult(await selectProfile(chosen.profileId, options));
+    },
+    { count },
+  );
+  add("preview", async () => {
     if (profiles.length === 0) {
       context.ui.notify(renderMessage("menu.empty"), "info");
       return;
@@ -70,7 +82,20 @@ export async function openMenu(
       ),
     );
   });
-  add(renderMessage("menu.item.status"), async () => {
+  if (context.mode === "tui" && context.ui.input && context.ui.editor) {
+    add("create", async () => createProfile(context, options.libraryRoot));
+    add("edit", async () => {
+      if (profiles.length === 0) {
+        context.ui.notify(renderMessage("menu.empty"), "info");
+        return;
+      }
+      const chosen = await pickProfile(context, profiles, renderMessage("menu.edit.title"));
+      if (chosen === undefined) return;
+      if ("back" in chosen) return openMenu(context, options, describeApplication);
+      await editProfile(context, options.libraryRoot, chosen.profileId);
+    });
+  }
+  add("status", async () => {
     const result = await executeSelectorCommand(
       { kind: "parsed", command: "status", argument: "" },
       options,
@@ -81,27 +106,30 @@ export async function openMenu(
         : result,
     );
   });
-  add(renderMessage("menu.item.off"), async () => notifyResult(await turnOff(options)));
-  add(renderMessage("menu.item.reload"), async () =>
+  add("off", async () => notifyResult(await turnOff(options)));
+  add("reload", async () =>
     notifyResult(
       await executeSelectorCommand({ kind: "parsed", command: "reload", argument: "" }, options),
     ),
   );
-  add(renderMessage("menu.item.howto"), async () =>
+  add("howto", async () =>
     context.ui.notify(
       renderMessage("menu.howto", { folder: escapePath(options.libraryRoot) }),
       "info",
     ),
   );
-  add(renderMessage("menu.item.close"), async () => {});
+  add("close", async () => {});
 
-  const title = [
-    renderMessage("menu.title"),
+  const subtitle = [
     renderMessage("menu.summary"),
     "",
     ...(await describeState(options, listing, profiles.length, invalidCount)),
   ].join("\n");
-  const picked = await context.ui.select(title, [...items.keys()]);
+  const picked = await selectMenuItem(context, {
+    title: renderMessage("menu.title"),
+    subtitle,
+    items: [...items.values()],
+  });
   const item = picked === undefined ? undefined : items.get(picked);
   if (item !== undefined) await item.run();
 }
@@ -141,19 +169,21 @@ async function pickProfile(
   profiles: readonly ProfileSummary[],
   title: string,
 ): Promise<PickResult | undefined> {
-  const labels = new Map<string, string>();
-  for (const profile of profiles) {
-    labels.set(
-      `${profile.id}: ${escapeLabel(profile.name)} — ${escapeLabel(profile.description)}`,
-      profile.id,
-    );
-  }
-  const back = renderMessage("menu.item.back");
-  const picked = await context.ui.select(title, [...labels.keys(), back]);
+  const items: MenuChoice[] = profiles.map((profile) => {
+    const label = `${profile.id}: ${escapeLabel(profile.name)}`;
+    const description = escapeLabel(profile.description);
+    return {
+      value: profile.id,
+      label,
+      description,
+      fallbackLabel: `${label} — ${description}`,
+    };
+  });
+  // Empty is not a valid profile id, so it cannot collide with the back entry.
+  items.push({ value: "", label: renderMessage("menu.item.back") });
+  const picked = await selectMenuItem(context, { title, items });
   if (picked === undefined) return undefined;
-  if (picked === back) return { back: true };
-  const profileId = labels.get(picked);
-  return profileId === undefined ? undefined : { profileId };
+  return picked === "" ? { back: true } : { profileId: picked };
 }
 
 // The library path comes from PI_CODING_AGENT_DIR, so control, line-separator and bidirectional

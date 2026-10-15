@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Searchable TUI menu with profile creation and editing through the host's input and editor dialogs.
+
 ### Changed
 
 - A bare `/prefill` opens the menu in the TUI. `/prefill list` keeps the direct profile selector.

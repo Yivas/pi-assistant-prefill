@@ -1,5 +1,5 @@
 // Structural subset of the Pi 1.1.0 extension API, declared here so the package does not import
-// Pi. Only the members that src/index.ts, src/selector.ts and src/projection.ts use are listed. Each
+// Pi. Only the members used by this extension are listed. Each
 // one is a subset of the matching declaration in dist/core/extensions/types.d.ts of Pi 1.1.0, so
 // Pi's own types accept what this package passes. That does not establish compatibility with other
 // Pi versions; see docs/selector.md and docs/projection.md.
@@ -12,9 +12,42 @@ export type PiExtensionMode = "tui" | "rpc" | "json" | "print";
 
 export type PiNoticeType = "info" | "warning" | "error";
 
+export interface PiTheme {
+  fg(color: "accent" | "muted" | "dim" | "text", text: string): string;
+  bold(text: string): string;
+}
+
+export type PiSelectAction =
+  | "tui.select.up"
+  | "tui.select.down"
+  | "tui.select.pageUp"
+  | "tui.select.pageDown"
+  | "tui.select.confirm"
+  | "tui.select.cancel";
+
+export interface PiKeybindings {
+  matches(data: string, action: PiSelectAction): boolean;
+}
+
+export interface PiComponent {
+  render(width: number): string[];
+  handleInput(data: string): void;
+  invalidate(): void;
+}
+
 export interface PiCommandUi {
   notify(message: string, type: PiNoticeType): void;
   select(title: string, options: readonly string[]): Promise<string | undefined>;
+  input?(title: string, placeholder?: string): Promise<string | undefined>;
+  editor?(title: string, prefill?: string): Promise<string | undefined>;
+  custom?<T>(
+    factory: (
+      tui: { readonly terminal: { readonly rows: number } },
+      theme: PiTheme,
+      keybindings: PiKeybindings,
+      done: (result: T) => void,
+    ) => PiComponent,
+  ): Promise<T>;
 }
 
 export interface PiCommandContext {

@@ -14,6 +14,9 @@ import prefillExtension, {
   SELECTOR_ENTRY_TYPE,
   type SelectorOptionsResolution,
 } from "../src/index.ts";
+import { writeProfile as saveProfile } from "../src/profile-writer.ts";
+import { loadProfileCatalog } from "../src/profiles.ts";
+import { selectMenuItem } from "../src/search-list.ts";
 import { readSelection } from "../src/selection.ts";
 import {
   completeSubcommands,
@@ -875,6 +878,118 @@ describe("command side effects", () => {
     assert.deepEqual(await snapshotTree(library.options.libraryRoot), before);
     await assert.rejects(fs.access(library.options.stateDirectory));
   });
+});
+
+it("fits a narrow menu and confirms a case-insensitive description match", async () => {
+  const recording = recordingContext("tui", () => undefined);
+  recording.context.ui.custom = (factory) =>
+    new Promise((resolve) => {
+      const component = factory(
+        { terminal: { rows: 24 } },
+        { fg: (_color, text) => text, bold: (text) => text },
+        { matches: (data, action) => data === action },
+        resolve,
+      );
+      for (const width of [1, 12]) {
+        assert.ok(component.render(width).every((line) => line.length <= width));
+      }
+      for (const character of "sAvEd") component.handleInput(character);
+      assert.ok(component.render(60).some((line) => line.includes("→ Choose")));
+      assert.ok(!component.render(60).some((line) => line.includes("Close")));
+      component.handleInput("tui.select.confirm");
+    });
+  assert.equal(
+    await selectMenuItem(recording.context, {
+      title: "Prefill",
+      subtitle: "Synthetic state\nSecond line",
+      items: [
+        { value: "close", label: "Close" },
+        { value: "choose", label: "Choose", description: "Use a saved example" },
+      ],
+    }),
+    "choose",
+  );
+});
+
+it("creates and edits a catalog-valid profile through the TUI menu", async (t) => {
+  const library = await libraryWith(t);
+  const recording = recordingContext("tui", (options) =>
+    options.find((label) => label === "Create a profile"),
+  );
+  const inputs = ["new-example", "New example", "Synthetic example"];
+  const bodies = ["User text\n", "Assistant text\n"];
+  recording.context.ui.input = async () => inputs.shift();
+  recording.context.ui.editor = async () => bodies.shift();
+  await handlePrefillCommand(
+    "",
+    recording.context,
+    resolvedOptions(library.options),
+    recording.appendEntry,
+  );
+  const created = await loadProfileCatalog(library.options.libraryRoot);
+  assert.equal(created.status, "loaded");
+  if (created.status !== "loaded") return;
+  assert.deepEqual(created.profiles, [
+    {
+      id: "new-example",
+      name: "New example",
+      description: "Synthetic example",
+      userText: "User text\n",
+      assistantText: "Assistant text\n",
+    },
+  ]);
+  assert.match(recording.notices.at(-1)?.message ?? "", /^Profile created and validated/);
+
+  let step = 0;
+  const editing = recordingContext("tui", (options) => {
+    step += 1;
+    return step === 1 ? "Edit a profile" : step === 2 ? options[0] : "User message";
+  });
+  editing.context.ui.input = async () => undefined;
+  editing.context.ui.editor = async (_title, prefill) => {
+    assert.equal(prefill, "User text\n");
+    return "Changed user text\n";
+  };
+  await handlePrefillCommand(
+    "",
+    editing.context,
+    resolvedOptions(library.options),
+    editing.appendEntry,
+  );
+  const edited = await loadProfileCatalog(library.options.libraryRoot);
+  assert.equal(edited.status, "loaded");
+  if (edited.status !== "loaded") return;
+  assert.deepEqual(edited.profiles, [{ ...created.profiles[0], userText: "Changed user text\n" }]);
+  assert.match(editing.notices.at(-1)?.message ?? "", /profile revision changed/);
+});
+
+it("leaves the library unchanged on cancellation or an existing profile id", async (t) => {
+  const library = await libraryWith(t, ["brief-example"]);
+  const before = await snapshotTree(library.options.libraryRoot);
+  const recording = recordingContext("tui", () => "Create a profile");
+  recording.context.ui.input = async () => "new-example";
+  recording.context.ui.editor = async () => undefined;
+  await handlePrefillCommand(
+    "",
+    recording.context,
+    resolvedOptions(library.options),
+    recording.appendEntry,
+  );
+  assert.deepEqual(await snapshotTree(library.options.libraryRoot), before);
+  assert.deepEqual(
+    await saveProfile(library.options.libraryRoot, {
+      kind: "create",
+      profile: {
+        id: "brief-example",
+        name: "Replacement",
+        description: "Synthetic",
+        userText: "Changed",
+        assistantText: "Changed",
+      },
+    }),
+    { status: "failed", reason: "exists" },
+  );
+  assert.deepEqual(await snapshotTree(library.options.libraryRoot), before);
 });
 
 describe("the prefill menu", () => {

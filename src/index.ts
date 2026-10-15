@@ -170,8 +170,8 @@ async function handleInteractive(
 }
 
 // Each option maps to its action, so a picked label is never matched against the profile list
-// again. Cancelling the dialog returns without any change. The host's select dialog does the
-// filtering; this package adds no search of its own.
+// again. Cancelling the dialog returns without any change. This is the host's select dialog, used
+// by `/prefill list`; the bare menu uses the searchable list in src/search-list.ts.
 async function chooseProfile(context: PiCommandContext, options: SelectorOptions): Promise<void> {
   const listing = await listProfiles(options);
   if (listing.kind !== "list" || listing.profiles.length === 0) {
