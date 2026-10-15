@@ -10,6 +10,7 @@ import type {
   PiExtensionApi,
   PiReadonlySessionManager,
 } from "./extension-types.ts";
+import { openMenu } from "./menu.ts";
 import { renderMessage } from "./messages.ts";
 import { PrefixProjection } from "./projection.ts";
 import {
@@ -52,7 +53,7 @@ export default function prefillExtension(pi: PiExtensionApi): void {
   });
 
   pi.registerCommand(COMMAND_NAME, {
-    description: "Choose, disable or inspect the local prefill profile",
+    description: "Prefill menu: choose, preview, disable or inspect the saved example",
     getArgumentCompletions: completeSubcommands,
     handler: (argumentText, context) =>
       handlePrefillCommand(
@@ -112,7 +113,7 @@ export async function handlePrefillCommand(
   const { options } = resolution;
   const parsed = parseSelectorText(argumentText);
   if (context.mode === "tui") {
-    await handleInteractive(parsed, context, options, describeApplication);
+    await handleInteractive(argumentText, parsed, context, options, describeApplication);
     return;
   }
   const result = await executeSelectorCommand(parsed, options);
@@ -143,11 +144,17 @@ function publish(
 }
 
 async function handleInteractive(
+  argumentText: string,
   parsed: ParsedSelectorText,
   context: PiCommandContext,
   options: SelectorOptions,
   describeApplication: ApplicationDescriber,
 ): Promise<void> {
+  // A bare `/prefill` opens the menu. `list` keeps the direct profile chooser.
+  if (isBlank(argumentText)) {
+    await openMenu(context, options, () => describeApplication(context.sessionManager));
+    return;
+  }
   const isBareList =
     parsed.kind === "parsed" && parsed.command === "list" && parsed.argument === "";
   if (isBareList) {
@@ -183,4 +190,9 @@ async function chooseProfile(context: PiCommandContext, options: SelectorOptions
   if (action === undefined) return;
   const result = await action();
   context.ui.notify(renderSelectorText(result), noticeTypeFor(result));
+}
+
+// Only ASCII whitespace counts, as in the argument grammar of docs/selector.md.
+function isBlank(text: string): boolean {
+  return text.split("").every((character) => " \t\n\r\f".includes(character));
 }

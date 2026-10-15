@@ -499,6 +499,7 @@ interface Recording {
   readonly entries: Array<{ readonly customType: string; readonly data: unknown }>;
   readonly notices: Array<{ readonly message: string; readonly type: PiNoticeType }>;
   readonly offered: string[][];
+  readonly titles: string[];
 }
 
 // `pick` receives the offered options and returns the one the operator chooses, or undefined.
@@ -509,6 +510,7 @@ function recordingContext(
   const entries: Recording["entries"] = [];
   const notices: Recording["notices"] = [];
   const offered: string[][] = [];
+  const titles: string[] = [];
   const appendEntry = (customType: string, data: unknown): void => {
     entries.push({ customType, data });
   };
@@ -519,13 +521,14 @@ function recordingContext(
       notify: (message, type) => {
         notices.push({ message, type });
       },
-      select: async (_title, options) => {
+      select: async (title, options) => {
+        titles.push(title);
         offered.push([...options]);
         return pick(options);
       },
     },
   };
-  return { context, appendEntry, entries, notices, offered };
+  return { context, appendEntry, entries, notices, offered, titles };
 }
 
 describe("handlePrefillCommand by mode", () => {
@@ -691,7 +694,7 @@ describe("handlePrefillCommand by mode", () => {
     const recording = recordingContext("tui");
 
     await handlePrefillCommand(
-      "",
+      "list",
       recording.context,
       resolvedOptions(library.options),
       recording.appendEntry,
@@ -733,7 +736,7 @@ describe("handlePrefillCommand by mode", () => {
     const recording = recordingContext("tui", (options) => options.at(-1));
 
     await handlePrefillCommand(
-      "",
+      "list",
       recording.context,
       resolvedOptions(library.options),
       recording.appendEntry,
@@ -768,7 +771,7 @@ describe("handlePrefillCommand by mode", () => {
     const recording = recordingContext("tui");
 
     await handlePrefillCommand(
-      "",
+      "list",
       recording.context,
       resolvedOptions(library.options),
       recording.appendEntry,
@@ -871,5 +874,89 @@ describe("command side effects", () => {
     t.mock.restoreAll();
     assert.deepEqual(await snapshotTree(library.options.libraryRoot), before);
     await assert.rejects(fs.access(library.options.stateDirectory));
+  });
+});
+
+describe("the prefill menu", () => {
+  const MENU = [
+    "Choose a profile (1 available)",
+    "Preview a profile",
+    "Show status of this session",
+    "Turn prefill off",
+    "Reload the library from disk",
+    "How to add a profile",
+    "Close",
+  ];
+
+  async function openBare(
+    library: Awaited<ReturnType<typeof libraryWith>>,
+    pick: (options: readonly string[]) => string | undefined,
+  ) {
+    const recording = recordingContext("tui", pick);
+    await handlePrefillCommand(
+      "  ",
+      recording.context,
+      resolvedOptions(library.options),
+      recording.appendEntry,
+    );
+    return recording;
+  }
+
+  it("opens on a bare command with the state in the title and every action", async (t) => {
+    const library = await libraryWith(t, ["brief-example"]);
+    const recording = await openBare(library, () => undefined);
+
+    assert.deepEqual(recording.offered, [MENU]);
+    const title = recording.titles[0] ?? "";
+    assert.match(title, /^Prefill\n/);
+    assert.match(title, /Choice: none yet/);
+    assert.match(title, /Library: 1 valid, 0 left out/);
+    assert.match(title, /Folder: /);
+    assert.deepEqual(recording.notices, []);
+    assert.deepEqual(await readSelection(library.options.stateDirectory), {
+      status: "loaded",
+      choice: { kind: "unset" },
+    });
+  });
+
+  it("still offers every action when the library is empty", async (t) => {
+    const library = await libraryWith(t);
+    const recording = await openBare(library, () => undefined);
+
+    assert.equal(recording.offered[0]?.length, 7);
+    assert.equal(recording.offered[0]?.[0], "Choose a profile (none yet)");
+    assert.match(recording.titles[0] ?? "", /Library: 0 valid, 0 left out/);
+  });
+
+  it("chooses a profile through a second dialog that lists its description", async (t) => {
+    const library = await libraryWith(t, ["brief-example"]);
+    const recording = await openBare(library, (options) => options[0]);
+
+    assert.equal(recording.offered.length, 2);
+    assert.equal(recording.offered[1]?.at(-1), "Back to the menu");
+    assert.match(recording.offered[1]?.[0] ?? "", /^brief-example: Brief example — /);
+    assert.deepEqual(await readSelection(library.options.stateDirectory), {
+      status: "loaded",
+      choice: { kind: "profile", profileId: "brief-example" },
+    });
+    assert.match(recording.notices[0]?.message ?? "", /^Selected brief-example\./);
+  });
+
+  it("returns to the menu from the profile dialog without changing anything", async (t) => {
+    const library = await libraryWith(t, ["brief-example"]);
+    let step = 0;
+    const recording = await openBare(library, (options) => {
+      step += 1;
+      if (step === 1) return options[0];
+      if (step === 2) return options.at(-1);
+      return undefined;
+    });
+
+    assert.equal(recording.offered.length, 3);
+    assert.deepEqual(recording.offered[2], MENU);
+    assert.deepEqual(await readSelection(library.options.stateDirectory), {
+      status: "loaded",
+      choice: { kind: "unset" },
+    });
   });
 });

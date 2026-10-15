@@ -7,13 +7,14 @@
 - The extension source is in this repository and ships in the published package `pi-assistant-prefill`, installed with `pi install npm:pi-assistant-prefill@0.1.0`.
 - The automated suite (`npm run check`) calls the command with a simulated context and a temporary library. It does not start Pi.
 - The structural types in `src/extension-types.ts` were checked with the TypeScript compiler against the declarations in `dist/core/extensions/types.d.ts` of Pi 1.1.0, from a temporary directory outside the repository, as described in [projection.md](projection.md#verification). That check is not part of `npm run check`.
-- The manual check in [Manual isolated check](#manual-isolated-check) ran on 2026-10-13 (local time) on Windows 10.0.26300 with Node.js v24.9.0 and Pi 1.1.0. That is the only run recorded. No other Pi version, platform or model provider was checked.
+- The manual check in [Manual isolated check](#manual-isolated-check) ran on 2026-10-13 (local time) on Windows 10.0.26300 with Node.js v24.9.0 and Pi 1.1.0. A separate TUI check on Pi 1.1.0 rendered the menu with an empty library and a temporary agent directory, including its title, state, folder and all seven actions. Selection through the menu was tested with a simulated context, not in the real TUI. No other Pi version, platform or model provider was checked.
 
 ## Subcommands
 
 | Input | Effect |
 | --- | --- |
-| `/prefill` or `/prefill list` | Lists the valid profiles. In the interactive TUI it opens the host's select dialog with them and an entry that records an explicit disable. |
+| `/prefill` | Opens the menu in the interactive TUI. In RPC and JSON mode, lists the valid profiles without a dialog. |
+| `/prefill list` | Lists the valid profiles. In the interactive TUI it opens the direct profile selector with them and an entry that records an explicit disable. |
 | `/prefill use <id>` | Records `<id>` as the pending choice after checking that the catalog has a valid profile with that identifier. |
 | `/prefill off` | Records an explicit disable and clears any pending choice. |
 | `/prefill status` | Shows the pending choice, whether an explicit disable is recorded, the environment disable if any, the application state of the current branch (see [projection.md](projection.md#status)). |
@@ -30,20 +31,20 @@ The argument text arrives literally.
 2. The first token is the subcommand. It ends at the first ASCII whitespace character.
 3. The rest, after the separating whitespace, is the argument. Quotes and backslashes have no meaning. Nothing is interpolated.
 
-Empty input means `list`. A subcommand that takes no argument (`list`, `off`, `status`, `reload`) fails with `unexpected-argument` when one is given. `use` and `preview` require an identifier. An identifier is valid when it passes the library rule: 1 to 64 characters from `a-z` and `0-9`, with single hyphens only between characters, and not a Windows device name. Anything else fails with `invalid-id`. An unknown subcommand fails with `unknown-subcommand`, and no state changes.
+Empty input opens the menu in the TUI and means `list` in RPC and JSON mode. A subcommand that takes no argument (`list`, `off`, `status`, `reload`) fails with `unexpected-argument` when one is given. `use` and `preview` require an identifier. An identifier is valid when it passes the library rule: 1 to 64 characters from `a-z` and `0-9`, with single hyphens only between characters, and not a Windows device name. Anything else fails with `invalid-id`. An unknown subcommand fails with `unknown-subcommand`, and no state changes.
 
 Completion offers the subcommand names only. Profile identifiers need the catalog, and the completion callback is synchronous.
 
 ## Behavior by mode
 
-| Mode | `list` without argument | Other subcommands | Result channel |
-| --- | --- | --- | --- |
-| `tui` | Opens the host's select dialog. Cancelling changes nothing. | Notice only. | `ui.notify` |
-| `rpc` | Lists, without a dialog. | Runs the subcommand. | Session entry through `pi.appendEntry`, plus `ui.notify` |
-| `json` | Lists, without a dialog. | Runs the subcommand. | Session entry through `pi.appendEntry`, plus `ui.notify` |
-| `print` | Nothing runs. | Nothing runs. | None |
+| Mode | Empty input | `list` without argument | Other subcommands | Result channel |
+| --- | --- | --- | --- | --- |
+| `tui` | Opens the menu. | Opens the direct profile selector. Cancelling changes nothing. | Notice only. | `ui.notify` |
+| `rpc` | Lists, without a dialog. | Lists, without a dialog. | Runs the subcommand. | Session entry through `pi.appendEntry`, plus `ui.notify` |
+| `json` | Lists, without a dialog. | Lists, without a dialog. | Runs the subcommand. | Session entry through `pi.appendEntry`, plus `ui.notify` |
+| `print` | Nothing runs. | Nothing runs. | Nothing runs. | None |
 
-In the TUI the filtering of the list belongs to the host's select dialog. This package adds no search of its own, and the TUI has not been run end to end.
+In the TUI the filtering of the list belongs to the host's select dialog. This package adds no search of its own. The empty-library menu render was checked in Pi 1.1.0; selection through the menu was tested with a simulated context, not in the real TUI.
 
 Failures never throw. In `rpc` and `json` a failure is written as an entry with `kind: "failed"` and a diagnostic, and the notice has type `error`. A thrown error would be caught by the host and reported with exit status 0.
 
@@ -52,6 +53,24 @@ In `print` mode the handler returns without reading or writing anything. Text ou
 Entries use the custom type `pi-assistant-prefill.selector`. Their `kind` field is `list`, `selected`, `off`, `status`, `preview`, `reloaded` or `failed`.
 
 The mode is read from `ctx.mode`. The package does not use `ctx.hasUI` to decide whether a dialog is safe.
+
+## Menu
+
+A bare `/prefill` in the TUI always offers seven actions, even when the library is empty:
+
+- Choose a profile (N available, or none yet)
+- Preview a profile
+- Show status of this session
+- Turn prefill off
+- Reload the library from disk
+- How to add a profile
+- Close
+
+The dialog title shows a short summary, the pending choice or recorded disable, the library state (valid profiles and candidates left out, or an unusable library) and the library folder.
+
+Choose and Preview open a second dialog with entries in the form `id: name — description`. Its `Back to the menu` entry returns to the main menu. With no valid profiles, either action shows a notice instead of opening a second dialog.
+
+The menu only reads the library; it never writes to it. Choosing a profile or turning prefill off records the choice outside the library, as described in [Recorded state](#recorded-state).
 
 ## PI_PREFILL_OFF
 

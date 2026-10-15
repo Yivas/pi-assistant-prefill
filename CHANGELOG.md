@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- A bare `/prefill` opens the menu in the TUI. `/prefill list` keeps the direct profile selector.
+
 ## 0.1.0
 
 First release of the extension source.
