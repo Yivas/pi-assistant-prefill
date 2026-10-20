@@ -62,6 +62,22 @@ export async function saveSelection(
   }
 }
 
+// "Unset" is the absence of the state file, so recording it removes the file. A state that cannot be
+// read is refused first: it is never deleted to look like an automatic choice.
+export async function clearSelection(stateDirectory: string): Promise<SelectionSave> {
+  try {
+    await readChoice(stateDirectory);
+    const realDirectory = await resolveRootDirectory(stateDirectory);
+    if (realDirectory === null) return { status: "saved" };
+    await fileOperation(() =>
+      fs.rm(path.join(realDirectory, SELECTION_FILE_NAME), { force: true }),
+    );
+    return { status: "saved" };
+  } catch (error) {
+    return { status: "failed", diagnostic: failureDiagnostic(error) };
+  }
+}
+
 function failureDiagnostic(error: unknown): ProfileDiagnostic {
   if (error instanceof ProfileFailure) return toDiagnostic(error, null, null);
   throw error;

@@ -9,7 +9,7 @@ This page records what has actually been checked, with what, and what remains un
 | Pi | 1.1.0, installed from npm |
 | Node.js | 24.9.0 |
 | Platform | Windows 10.0.26300 with Git Bash for the manual checks. The automated suite also runs in GitHub Actions on `ubuntu-latest` and `windows-latest` |
-| Providers | None. All checks use the manual harness with a local double, or no provider at all |
+| Providers | None. The checks use local doubles on `127.0.0.1` with a synthetic key, or no provider at all |
 | Credentials | None. No real key is read, written or sent |
 
 No other Pi version, Node version or model provider has been checked. The manual checks were run on Windows only; the automated suite also passes on Linux in continuous integration. Nothing here shows how a real model provider responds.
@@ -18,6 +18,7 @@ No other Pi version, Node version or model provider has been checked. The manual
 
 - **Automated suite.** `npm run check` runs formatting, lint, type checking and the tests. It uses a simulated host and temporary directories, and never starts Pi.
 - **Manual harness.** `test/harness/` starts the installed Pi against a local HTTP double that speaks the Anthropic messages protocol, with a synthetic key and an isolated agent directory. It is not part of `npm run check`. See [verification-harness.md](verification-harness.md).
+- **Local doubles outside the harness.** A manual run on 2026-10-15 (Windows, Pi 1.1.0, temporary agent directory) pointed Pi at local HTTP endpoints on `127.0.0.1` with a synthetic key: one speaks the Anthropic messages protocol and one speaks the OpenAI-compatible chat completions protocol, which Pi exposes through a model whose API is `openai-completions`. The captured requests and the recorded state are the evidence for the rows below. Nothing in this setup reaches a real provider.
 - **Isolated manual runs.** Pi started with `-ne -e <extension> -nc -ns -np --no-mcp --offline -na`, `PI_CODING_AGENT_DIR` in a temporary directory, and no provider configured.
 
 ## Matrix
@@ -31,7 +32,13 @@ No other Pi version, Node version or model provider has been checked. The manual
 | Future selection while another profile is applied | Passed | Unit tests: the applied profile stays, the new choice waits |
 | Edit or delete the applied profile and reload the catalog | Passed | Harness negative control: the pair disappears and a `revision-mismatch` diagnostic is written |
 | New session in the same process | Passed | Unit tests for state keyed by branch, not by process or session |
-| Unsupported destination and virtual selection | Passed | Unit tests: incompatible state, no projection, reason reported. The dispatched destination still cannot be read before sending |
+| Manual choice with an Anthropic model | Passed | Local Anthropic double: the captured request carries the example pair once, with no duplicate |
+| Manual choice with an OpenAI-compatible model | Passed | Local double through a model whose API is `openai-completions`: the first request carries the example pair and the first prompt, the second carries the pair once, then the first prompt, the first answer and the second prompt |
+| Provider binding with no recorded choice | Passed | Local double, `model: null` rule for the provider, recorded choice unset: both requests carry the example pair as in the row above. `/prefill status` shows the provenance line with the binding identifier and the provider and model recorded when it was applied |
+| Binding that does not match the selected provider | Passed | A rule for `anthropic` while the session used the synthetic OpenAI-compatible provider: no request carried the example pair |
+| Bindings written from the terminal menu | Passed | Real TUI, temporary agent directory: Manage bindings → Add → profile → provider from Pi's model registry, with `(no credentials)` on the providers without credentials → `(any model of <provider>)` wrote `config.json` with `schemaVersion: 2` and that rule |
+| Virtual selection | Passed, unit tests only | Unit tests: incompatible state, no projection, reason reported. No virtual model was run |
+| OpenAI Responses and other protocol families | Not run | Only the Anthropic messages and OpenAI-compatible chat completions doubles were used |
 | Model or provider change before and after applying | Passed | Unit tests for both orders. A real cross-provider change was not exercised |
 | Invalid input (absent, empty, future version, oversized, escape sequences) | Passed | Existing profile and configuration tests |
 | Retry and abort | Passed | Interruption harness kills the process on both sides of the commitment and checks the session afterwards |
@@ -48,7 +55,9 @@ No other Pi version, Node version or model provider has been checked. The manual
 
 ## Not demonstrated
 
-- Any behaviour against a real model provider, including whether it accepts the request and how caching behaves.
+- Any behaviour against a real model provider, including whether it accepts the request and how caching behaves. The local doubles answer with fixed text, so they show what Pi sent on each of those two protocols, not what a provider does with it.
+- Providers other than the two local doubles, including the OpenAI Responses API and protocol families that Pi converts to and the package does not name, subscriptions, and OAuth flows.
+- A virtual model in a real run; only unit tests cover that selection.
 - Automatic compaction triggered by a threshold; the compaction checks trigger it explicitly.
 - Cache warming with real cost, cache hits, or the branch that stops a refresh while an application is pending.
 - Other platforms, Node versions or Pi versions.

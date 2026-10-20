@@ -30,14 +30,13 @@ import {
   type LibraryFixture,
   snapshotTree,
   writeProfile,
+  writeRootFile,
 } from "./library-fixture.ts";
 
 const PROFILE_ID = "brief-example";
 const ANTHROPIC: PiModel = { provider: "anthropic", api: "anthropic-messages", id: "claude-test" };
 const VIRTUAL: PiModel = { provider: "router", api: "pi-virtual", id: "auto" };
 const OPENAI: PiModel = { provider: "openai", api: "openai-responses", id: "gpt-test" };
-// Another provider that speaks the Anthropic messages protocol: it is not Anthropic.
-const SAME_PROTOCOL: PiModel = { provider: "proxy", api: "anthropic-messages", id: "claude-test" };
 const COMPLETED = "completed";
 
 // The branch of a simulated session. Each appended entry is a child of the leaf, and the leaf moves
@@ -339,6 +338,10 @@ describe("commitment", () => {
     assert.equal(data.schemaVersion, 1);
     assert.equal(data.profileId, PROFILE_ID);
     assert.equal(data.combinedBytes, 77);
+    assert.equal(data.source, "manual");
+    assert.equal(data.bindingId, null);
+    assert.equal(data.provider, ANTHROPIC.provider);
+    assert.equal(data.model, ANTHROPIC.id);
     assert.match(String(data.applicationId), /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-/);
     assert.match(String(data.revision), /^[0-9a-f]{64}$/);
   });
@@ -526,21 +529,38 @@ describe("compatibility", () => {
     ]);
   });
 
-  it("does not start with a model of another provider that speaks the Anthropic messages API", async (t) => {
-    const harness = await selectedHarness(t, SAME_PROTOCOL);
+  it("projects into a model of another provider and records the binding that chose the profile", async (t) => {
+    const library: LibraryFixture = await createLibraryFixture(t);
+    await writeProfile(library.root, PROFILE_ID, briefFiles(PROFILE_ID));
+    await writeRootFile(
+      library.root,
+      "config.json",
+      '{"schemaVersion":2,"defaultProfileId":null,"bindings":[{"id":"b-1a2b3c4d","profileId":"brief-example","provider":"openai","model":"gpt-test"}]}',
+    );
+    const options: SelectorOptions = {
+      libraryRoot: library.root,
+      stateDirectory: join(library.base, "pi-assistant-prefill"),
+      environment: {},
+    };
+    const harness = harnessFor(options, OPENAI);
 
-    assert.equal(await runTurn(harness, "Question"), undefined);
-    assert.deepEqual(phasesOf(harness), []);
-    assert.deepEqual(diagnosticsOf(harness), [
-      { schemaVersion: 1, reason: "selection-incompatible", profileId: PROFILE_ID, detail: null },
-    ]);
-  });
+    const sent = await runTurn(harness, "Question");
+    const intent = harness.session
+      .customRecords()
+      .find((record) => (record.data as { phase?: unknown }).phase === "intent");
+    const recorded = intent?.data as Record<string, unknown>;
 
-  it("does not start with a physical model of another provider", async (t) => {
-    const harness = await selectedHarness(t, OPENAI);
-
-    assert.equal(await runTurn(harness, "Question"), undefined);
-    assert.deepEqual(phasesOf(harness), []);
+    assert.equal(textOf(sent?.[0]), BRIEF_USER_TEXT);
+    assert.equal(textOf(sent?.[1]), BRIEF_ASSISTANT_TEXT);
+    assert.deepEqual(
+      {
+        source: recorded.source,
+        bindingId: recorded.bindingId,
+        provider: recorded.provider,
+        model: recorded.model,
+      },
+      { source: "binding", bindingId: "b-1a2b3c4d", provider: "openai", model: "gpt-test" },
+    );
   });
 
   it("does not send the prefix to a virtual model on a committed branch, and keeps it", async (t) => {
@@ -552,32 +572,6 @@ describe("compatibility", () => {
 
     assert.equal(sent, undefined);
     assert.deepEqual(phasesOf(harness), ["intent", "projected", "committed"]);
-  });
-
-  it("suspends the branch while the latest response is not Anthropic, and resumes after an Anthropic response", async (t) => {
-    const harness = await selectedHarness(t);
-    beginTurn(harness);
-    userPrompt(harness, "First question");
-    await request(harness);
-    harness.model = OPENAI;
-    respond(harness, COMPLETED);
-    const reported = harness.projection.describeApplication(harness.session);
-
-    harness.model = ANTHROPIC;
-    const suspended = await runTurn(harness, "Second question");
-    const resumed = await runTurn(harness, "Third question");
-
-    assert.equal(reported.kind === "committed" && reported.suspended, true);
-    assert.equal(suspended, undefined);
-    assert.equal(textOf(resumed?.[0]), BRIEF_USER_TEXT);
-    assert.deepEqual(diagnosticsOf(harness), [
-      {
-        schemaVersion: 1,
-        reason: "destination-not-anthropic",
-        profileId: PROFILE_ID,
-        detail: null,
-      },
-    ]);
   });
 });
 
@@ -698,7 +692,10 @@ describe("application state reported to status", () => {
       profileId: PROFILE_ID,
       revision: intent.revision,
       combinedBytes: 77,
-      suspended: false,
+      source: "manual",
+      bindingId: null,
+      provider: ANTHROPIC.provider,
+      model: ANTHROPIC.id,
       refreshes: 0,
     });
   });
@@ -718,24 +715,12 @@ describe("application state reported to status", () => {
       profileId: PROFILE_ID,
       revision: committed.revision,
       combinedBytes: 77,
-      suspended: false,
+      source: "manual",
+      bindingId: null,
+      provider: ANTHROPIC.provider,
+      model: ANTHROPIC.id,
       refreshes: 1,
     });
-  });
-
-  it("reports the commitment and, apart from it, an unsupported destination", async (t) => {
-    const harness = await selectedHarness(t);
-    beginTurn(harness);
-    userPrompt(harness, "Question");
-    await request(harness);
-    harness.model = OPENAI;
-    respond(harness, COMPLETED);
-
-    const status = harness.projection.describeApplication(harness.session);
-
-    assert.equal(status.kind, "committed");
-    assert.equal(status.kind === "committed" && status.suspended, true);
-    assert.equal(status.kind === "committed" && status.profileId, PROFILE_ID);
   });
 
   it("reports a branch with an unreadable application record as invalid", async (t) => {
@@ -846,67 +831,5 @@ describe("invalid records and blocks", () => {
       .map((message) => (message as { content: { type: string }[] }).content.map((b) => b.type));
 
     assert.deepEqual(blocks, [["text"], ["text"]]);
-  });
-});
-
-describe("destination reports", () => {
-  it("reports each departure from Anthropic again after the branch returned to Anthropic", async (t) => {
-    const harness = await selectedHarness(t);
-    await runTurn(harness, "First question");
-
-    // Departure 1: a projected request answered by another destination.
-    beginTurn(harness);
-    userPrompt(harness, "Second question");
-    await request(harness);
-    harness.model = OPENAI;
-    respond(harness, COMPLETED);
-
-    // Back on Anthropic: the suspended request is sent without the example and answered by Anthropic.
-    harness.model = ANTHROPIC;
-    const suspended = await runTurn(harness, "Third question");
-
-    // Departure 2: a projected request answered by another destination again.
-    beginTurn(harness);
-    userPrompt(harness, "Fourth question");
-    const projected = await request(harness);
-    harness.model = OPENAI;
-    respond(harness, COMPLETED);
-
-    // Still away from Anthropic: a repeated response from the same destination is not reported again.
-    harness.model = ANTHROPIC;
-    beginTurn(harness);
-    userPrompt(harness, "Fifth question");
-    await request(harness);
-    harness.model = OPENAI;
-    respond(harness, COMPLETED);
-
-    const report = {
-      schemaVersion: 1,
-      reason: "destination-not-anthropic",
-      profileId: PROFILE_ID,
-      detail: null,
-    };
-    assert.equal(suspended, undefined);
-    assert.equal(textOf(projected?.[0]), BRIEF_USER_TEXT);
-    assert.deepEqual(diagnosticsOf(harness), [report, report]);
-  });
-
-  it("reports the departure of a response to a request refused for the selection", async (t) => {
-    const harness = await selectedHarness(t);
-    await runTurn(harness, "First question");
-
-    harness.model = OPENAI;
-    const refused = await runTurn(harness, "Second question");
-
-    assert.equal(refused, undefined);
-    assert.deepEqual(diagnosticsOf(harness), [
-      { schemaVersion: 1, reason: "selection-incompatible", profileId: PROFILE_ID, detail: null },
-      {
-        schemaVersion: 1,
-        reason: "destination-not-anthropic",
-        profileId: PROFILE_ID,
-        detail: null,
-      },
-    ]);
   });
 });

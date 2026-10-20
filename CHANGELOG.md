@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Binding rules in the library configuration: one profile for a provider, or for one model of a provider, chosen when no profile is recorded. Manage bindings in the TUI menu lists, adds and removes them.
+- Provenance in the application record: the source of the decision, the rule that won and the provider and model of the selection, shown by `/prefill status`.
+
+### Changed
+
+- The projection applies to any selected model whose API is not `pi-virtual`, instead of only a physical Anthropic model. The destination restriction and the suspension that followed a response from another destination are removed.
+- `config.json` is version 2, with `schemaVersion`, `defaultProfileId` and `bindings`. Version 1 is still read, and the first binding write migrates the file.
+
 ## 0.1.1
 
 ### Added

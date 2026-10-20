@@ -55,11 +55,27 @@ export interface PiCommandContext {
   readonly ui: PiCommandUi;
   // The session the command runs in. `status` reads the application state of its branch.
   readonly sessionManager: PiReadonlySessionManager;
+  // Pi provides the registry to every command. It is optional here because the menu only offers
+  // model bindings when it can read it, and a missing registry is not an error.
+  readonly modelRegistry?: PiModelRegistry;
 }
 
 export interface PiArgumentCompletion {
   readonly value: string;
   readonly label: string;
+}
+
+// A row of Pi's model registry, as the binding dialogs read it: the provider and model identifiers a
+// rule stores, and the API that tells a virtual model apart from a physical one.
+export interface PiModelRegistryEntry extends PiModel {
+  readonly name?: string;
+}
+
+// The part of Pi's model registry the TUI menu reads. `getAvailable` lists the models whose provider
+// has working credentials, so a provider missing from it is offered with a note.
+export interface PiModelRegistry {
+  getAll(): readonly PiModelRegistryEntry[];
+  getAvailable(): readonly PiModelRegistryEntry[];
 }
 
 export interface PiCommandRegistration {

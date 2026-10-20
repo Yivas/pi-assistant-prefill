@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
-import { resolveProfile } from "./config.ts";
+import { isRegistryIdentifier, type ProfileModelKey, resolveProfile } from "./config.ts";
 import { type ProfileDiagnostic, ProfileFailure } from "./diagnostic.ts";
 import type {
   PiAssistantMessage,
@@ -26,17 +26,15 @@ import type { SelectorOptions } from "./selector.ts";
 import {
   APPLICATION_ENTRY_TYPE,
   type ApplicationRecord,
+  type ApplicationSource,
   type ApplicationStatus,
   applicationData,
   type BranchPrefixState,
   CurrentLeafState,
   DIAGNOSTIC_ENTRY_TYPE,
-  destinationChangedToIncompatible,
   diagnosticData,
   hasConversation,
-  isAnthropicDestination,
   lastDiagnostic,
-  latestDestinationIncompatible,
   type PrefixDiagnostic,
   sameDiagnostic,
 } from "./session-state.ts";
@@ -44,6 +42,9 @@ import { MAX_JSON_DOCUMENT_BYTES } from "./strict-json.ts";
 
 // Byte limits of docs/profile-format.md. The library keeps them private, so they are repeated here.
 const MAX_TEXT_FILE_BYTES = 65536;
+// The API Pi gives to a virtual model. Such a model is routed by Pi itself and is not a provider the
+// example can be sent to, so it never starts an application. Pi does not export the constant.
+const VIRTUAL_MODEL_API = "pi-virtual";
 
 export interface PrefixProjectionOptions {
   readonly resolveOptions: () => SelectorOptionsResolution;
@@ -106,7 +107,7 @@ export class PrefixProjection {
     event: PiContextEvent<M>,
     context: PiEventContext,
   ): Promise<PiContextEventResult<M> | undefined> {
-    const selection = anthropicSelection(context.model);
+    const selection = eligibleSelection(context.model);
     if (!event.messages.some((message) => message.role !== "system")) return undefined;
     const state = this.currentLeaf.of(context.sessionManager);
     switch (state.kind) {
@@ -121,9 +122,7 @@ export class PrefixProjection {
   }
 
   // Runs after the assistant message of a request is persisted. The example is committed only by the
-  // first completed response of a request that carried it, and only through this boundary. A report of
-  // a departure from Anthropic is written for every response of an application, whether or not its
-  // request carried the example: a request refused for the selection is still answered by a destination.
+  // first completed response of a request that carried it, and only through this boundary.
   endTurnBoundary<D extends PiBoundaryDraft>(
     event: PiTurnEndEvent<D>,
     context: PiEventContext,
@@ -133,7 +132,7 @@ export class PrefixProjection {
     const state = this.currentLeaf.of(context.sessionManager);
     if (state.kind !== "pending" && state.kind !== "committed") return undefined;
 
-    const drafts = boundaryDrafts(event, state, context.sessionManager, projected);
+    const drafts = boundaryDrafts(event, state, projected);
     return drafts.length === 0 ? undefined : { entries: [...event.entries, ...drafts] };
   }
 
@@ -152,8 +151,8 @@ export class PrefixProjection {
     return undefined;
   }
 
-  // What `/prefill status` reports about the branch: the record metadata, whether the projection is
-  // suspended by the latest destination, and the warm refresh decisions counted for the application.
+  // What `/prefill status` reports about the branch: the record metadata with the provenance it was
+  // written with, and the warm refresh decisions counted for the application.
   describeApplication(sessionManager: PiReadonlySessionManager): ApplicationStatus {
     const state = this.currentLeaf.of(sessionManager);
     switch (state.kind) {
@@ -170,7 +169,10 @@ export class PrefixProjection {
           profileId: application.profileId,
           revision: application.revision,
           combinedBytes: application.combinedBytes,
-          suspended: latestDestinationIncompatible(sessionManager.getBranch()),
+          source: application.source,
+          bindingId: application.bindingId,
+          provider: application.provider,
+          model: application.model,
           refreshes: this.decisionCountOf(application.applicationId),
         };
       }
@@ -196,10 +198,17 @@ export class PrefixProjection {
     if (resolution.kind === "failed") {
       return this.refuse(context, libraryFailure(resolution.diagnostic));
     }
-    const selected = await selectedProfile(resolution.options);
+    // The selection is the model of this session, resolved at the moment the application starts:
+    // bindings name a provider and a model identifier, and no global default can stand in for them.
+    const selected = await selectedProfile(resolution.options, context.model ?? null);
     if (selected.kind === "none") return undefined;
     if (selected.kind === "failed") return this.refuse(context, selected.diagnostic);
     if (selection === null) {
+      return this.refuse(context, incompatibleSelection(selected.profileId));
+    }
+    // The record must stay readable, so a destination the configuration reader would reject never
+    // becomes a stored application.
+    if (!isRegistryIdentifier(selection.provider) || !isRegistryIdentifier(selection.id)) {
       return this.refuse(context, incompatibleSelection(selected.profileId));
     }
     const content = await this.loadContent(
@@ -217,6 +226,10 @@ export class PrefixProjection {
       profileId: selected.profileId,
       revision: content.revision,
       combinedBytes: content.combinedBytes,
+      source: recordSource(selected.source),
+      bindingId: selected.bindingId,
+      provider: selection.provider,
+      model: selection.id,
     };
     this.options.appendEntry(APPLICATION_ENTRY_TYPE, applicationData("intent", application));
     this.options.appendEntry(APPLICATION_ENTRY_TYPE, applicationData("projected", application));
@@ -237,9 +250,6 @@ export class PrefixProjection {
     }
     if (selection === null)
       return this.refuse(context, incompatibleSelection(application.profileId));
-    // Suspended while the latest response came from another destination. The next request is sent
-    // without the example; its Anthropic response clears the suspension, and the state reports it.
-    if (latestDestinationIncompatible(context.sessionManager.getBranch())) return undefined;
     const resolution = this.options.resolveOptions();
     if (resolution.kind === "failed") {
       return this.refuse(context, libraryFailure(resolution.diagnostic));
@@ -309,11 +319,19 @@ export class PrefixProjection {
 type SelectedProfile =
   | { readonly kind: "none" }
   | { readonly kind: "failed"; readonly diagnostic: PrefixDiagnostic }
-  | { readonly kind: "selected"; readonly profileId: string };
+  | {
+      readonly kind: "selected";
+      readonly profileId: string;
+      readonly source: "choice" | "binding" | "default";
+      readonly bindingId: string | null;
+    };
 
-// The selection is resolved with the library's own rules, so a default profile and PI_PREFILL_OFF
-// behave as they do for /prefill.
-async function selectedProfile(options: SelectorOptions): Promise<SelectedProfile> {
+// The selection is resolved with the library's own rules, so a binding, a default profile and
+// PI_PREFILL_OFF behave as they do for /prefill.
+async function selectedProfile(
+  options: SelectorOptions,
+  model: ProfileModelKey | null,
+): Promise<SelectedProfile> {
   const selection = await readSelection(options.stateDirectory);
   if (selection.status === "failed") {
     return { kind: "failed", diagnostic: libraryFailure(selection.diagnostic) };
@@ -322,16 +340,28 @@ async function selectedProfile(options: SelectorOptions): Promise<SelectedProfil
     libraryRoot: options.libraryRoot,
     environment: options.environment,
     choice: selection.choice,
+    model,
   });
   switch (resolution.status) {
     case "selected":
-      return { kind: "selected", profileId: resolution.profile.id };
+      return {
+        kind: "selected",
+        profileId: resolution.profile.id,
+        source: resolution.source,
+        bindingId: resolution.source === "binding" ? resolution.bindingId : null,
+      };
     case "off":
     case "none":
       return { kind: "none" };
     case "failed":
       return { kind: "failed", diagnostic: libraryFailure(resolution.diagnostic) };
   }
+}
+
+// The record keeps one vocabulary: a profile the operator chose is a manual one. The resolution calls
+// that source a choice, because for the library a recorded choice and a binding are both a decision.
+function recordSource(source: "choice" | "binding" | "default"): ApplicationSource {
+  return source === "choice" ? "manual" : source;
 }
 
 // Reads the three files of a profile. The revision is computed from the same bytes that become the
@@ -432,42 +462,23 @@ function insertPrefixPair<M extends PiMessage>(
   return [...messages.slice(0, head), ...pair, ...messages.slice(head)];
 }
 
-// The selection decides compatibility: only a physical Anthropic model passes.
-function anthropicSelection(model: PiModel | undefined): PiModel | null {
+// The selection decides eligibility: any physical model Pi can dispatch passes, so the example
+// travels to whatever provider the operator chose. A virtual model is excluded: Pi routes it itself
+// and it is not a destination of its own.
+function eligibleSelection(model: PiModel | undefined): PiModel | null {
   if (model === undefined) return null;
-  return isAnthropicDestination(model) ? model : null;
+  return model.api === VIRTUAL_MODEL_API ? null : model;
 }
 
-// A completed response of a projected request commits the application whatever its destination; the
-// destination only decides later requests. A report is written when the branch leaves Anthropic, not
-// on every response from another destination.
+// A completed response of a projected request commits the application whatever its destination.
 function boundaryDrafts(
   event: PiTurnEndEvent,
   state: Extract<BranchPrefixState, { kind: "pending" | "committed" }>,
-  sessionManager: PiReadonlySessionManager,
   projected: boolean,
 ): PiCustomEntryDraft[] {
-  const { application } = state;
-  const drafts: PiCustomEntryDraft[] = [];
-  if (
-    !isAnthropicDestination(event.message) &&
-    destinationChangedToIncompatible(sessionManager.getBranch())
-  ) {
-    drafts.push(
-      customDraft(
-        DIAGNOSTIC_ENTRY_TYPE,
-        diagnosticData({
-          reason: "destination-not-anthropic",
-          profileId: application.profileId,
-          detail: null,
-        }),
-      ),
-    );
-  }
-  if (projected && event.outcome === "completed" && state.kind === "pending") {
-    drafts.push(customDraft(APPLICATION_ENTRY_TYPE, applicationData("committed", application)));
-  }
-  return drafts;
+  return projected && event.outcome === "completed" && state.kind === "pending"
+    ? [customDraft(APPLICATION_ENTRY_TYPE, applicationData("committed", state.application))]
+    : [];
 }
 
 function customDraft(customType: string, data: unknown): PiCustomEntryDraft {

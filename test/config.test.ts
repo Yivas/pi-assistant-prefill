@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import { basename, join } from "node:path";
 import { describe, it } from "node:test";
-import { loadProfileConfig, resolveProfile } from "../src/config.ts";
+import { loadProfileConfig, type ResolveProfileOptions, resolveProfile } from "../src/config.ts";
 import {
   BRIEF_ASSISTANT_TEXT,
   BRIEF_DESCRIPTION,
   BRIEF_NAME,
   BRIEF_USER_TEXT,
+  briefFiles,
   createLibraryFixture,
   externalCallRecorder,
   fileSystemCallRecorder,
@@ -33,6 +34,17 @@ function configurationFailure(code: string) {
   };
 }
 
+// The version 1 shape: a configuration with a default and no bindings.
+function loadedConfiguration(defaultProfileId: string | null) {
+  return { status: "loaded", defaultProfileId, bindings: [] };
+}
+
+// These cases start from a recorded or configured decision and no selected model; the binding table
+// below passes a model explicitly.
+function resolveWithoutModel(options: Omit<ResolveProfileOptions, "model">) {
+  return resolveProfile({ ...options, model: null });
+}
+
 describe("loadProfileConfig", () => {
   it("uses the canonical root to locate configuration in a linked library", async (t) => {
     const { base, root } = await createLibraryFixture(t);
@@ -53,28 +65,28 @@ describe("loadProfileConfig", () => {
 
     const configuration = await loadProfileConfig(linkedRoot);
 
-    assert.deepEqual(configuration, { status: "loaded", defaultProfileId: "brief-example" });
+    assert.deepEqual(configuration, loadedConfiguration("brief-example"));
     assert.deepEqual(configurationPaths, [join(canonicalRoot, "config.json")]);
   });
 
   it("treats an absent configuration as having no default profile", async (t) => {
     const { root } = await createLibraryFixture(t);
 
-    assert.deepEqual(await loadProfileConfig(root), { status: "loaded", defaultProfileId: null });
+    assert.deepEqual(await loadProfileConfig(root), loadedConfiguration(null));
   });
 
   it("reads a null default as no default profile", async (t) => {
     const { root } = await createLibraryFixture(t);
     await writeRootFile(root, "config.json", '{ "schemaVersion": 1, "defaultProfileId": null }');
 
-    assert.deepEqual(await loadProfileConfig(root), { status: "loaded", defaultProfileId: null });
+    assert.deepEqual(await loadProfileConfig(root), loadedConfiguration(null));
   });
 
   it("reads a configuration without the optional default field as no default", async (t) => {
     const { root } = await createLibraryFixture(t);
     await writeRootFile(root, "config.json", '{"schemaVersion":1}');
 
-    assert.deepEqual(await loadProfileConfig(root), { status: "loaded", defaultProfileId: null });
+    assert.deepEqual(await loadProfileConfig(root), loadedConfiguration(null));
   });
 
   it("reads a valid default identifier without validating its profile", async (t) => {
@@ -85,10 +97,7 @@ describe("loadProfileConfig", () => {
       '{"schemaVersion":1,"defaultProfileId":"brief-example"}',
     );
 
-    assert.deepEqual(await loadProfileConfig(root), {
-      status: "loaded",
-      defaultProfileId: "brief-example",
-    });
+    assert.deepEqual(await loadProfileConfig(root), loadedConfiguration("brief-example"));
   });
 
   it("accepts a UTF-8 byte order mark in the configuration", async (t) => {
@@ -100,10 +109,7 @@ describe("loadProfileConfig", () => {
       Buffer.concat([bom, Buffer.from('{"schemaVersion":1,"defaultProfileId":"brief-example"}')]),
     );
 
-    assert.deepEqual(await loadProfileConfig(root), {
-      status: "loaded",
-      defaultProfileId: "brief-example",
-    });
+    assert.deepEqual(await loadProfileConfig(root), loadedConfiguration("brief-example"));
   });
 
   const invalidConfigurations: ReadonlyArray<readonly [string, string, string]> = [
@@ -114,7 +120,7 @@ describe("loadProfileConfig", () => {
       "duplicate-key",
     ],
     ["unknown field", '{"schemaVersion":1,"theme":"dark"}', "unknown-field"],
-    ["future schema version", '{"schemaVersion":2}', "unsupported-schema-version"],
+    ["future schema version", '{"schemaVersion":3}', "unsupported-schema-version"],
     ["missing schema version", '{"defaultProfileId":null}', "missing-field"],
     [
       "default with path syntax",
@@ -140,7 +146,7 @@ describe("loadProfileConfig", () => {
     const base = '{"schemaVersion":1,"defaultProfileId":null}';
     await writeRootFile(root, "config.json", base + " ".repeat(8192 - base.length));
 
-    assert.deepEqual(await loadProfileConfig(root), { status: "loaded", defaultProfileId: null });
+    assert.deepEqual(await loadProfileConfig(root), loadedConfiguration(null));
 
     await writeRootFile(root, "config.json", base + " ".repeat(8192 - base.length + 1));
     assert.deepEqual(await loadProfileConfig(root), {
@@ -158,10 +164,7 @@ describe("loadProfileConfig", () => {
     );
     await linkFile(target, join(root, "config.json"));
 
-    assert.deepEqual(await loadProfileConfig(root), {
-      status: "loaded",
-      defaultProfileId: "brief-example",
-    });
+    assert.deepEqual(await loadProfileConfig(root), loadedConfiguration("brief-example"));
   });
 
   it("rejects a configuration link that escapes the library root", async (t) => {
@@ -213,10 +216,7 @@ describe("loadProfileConfig", () => {
   it("treats a missing library root as an absent configuration", async (t) => {
     const { base } = await createLibraryFixture(t);
 
-    assert.deepEqual(await loadProfileConfig(join(base, "absent-root")), {
-      status: "loaded",
-      defaultProfileId: null,
-    });
+    assert.deepEqual(await loadProfileConfig(join(base, "absent-root")), loadedConfiguration(null));
   });
 });
 
@@ -230,7 +230,7 @@ describe("resolveProfile: explicit decisions and default", () => {
       '{"schemaVersion":1,"defaultProfileId":"absent-profile"}',
     );
 
-    const resolution = await resolveProfile({
+    const resolution = await resolveWithoutModel({
       libraryRoot: root,
       environment: {},
       choice: { kind: "profile", profileId: "brief-example" },
@@ -248,7 +248,7 @@ describe("resolveProfile: explicit decisions and default", () => {
       '{"schemaVersion":1,"defaultProfileId":"brief-example"}',
     );
 
-    const resolution = await resolveProfile({
+    const resolution = await resolveWithoutModel({
       libraryRoot: root,
       environment: {},
       choice: { kind: "unset" },
@@ -266,7 +266,7 @@ describe("resolveProfile: explicit decisions and default", () => {
       '{"schemaVersion":1,"defaultProfileId":"absent-profile"}',
     );
 
-    const resolution = await resolveProfile({
+    const resolution = await resolveWithoutModel({
       libraryRoot: root,
       environment: {},
       choice: { kind: "unset" },
@@ -292,7 +292,7 @@ describe("resolveProfile: explicit decisions and default", () => {
       '{"schemaVersion":1,"defaultProfileId":"brief-example"}',
     );
 
-    const resolution = await resolveProfile({
+    const resolution = await resolveWithoutModel({
       libraryRoot: root,
       environment: {},
       choice: { kind: "profile", profileId: "../outside" },
@@ -318,7 +318,7 @@ describe("resolveProfile: explicit decisions and default", () => {
       '{"schemaVersion":1,"defaultProfileId":"brief-example"}',
     );
 
-    const resolution = await resolveProfile({
+    const resolution = await resolveWithoutModel({
       libraryRoot: root,
       environment: {},
       choice: { kind: "profile", profileId: "absent-profile" },
@@ -339,7 +339,7 @@ describe("resolveProfile: explicit decisions and default", () => {
     const { root } = await createLibraryFixture(t);
     await writeProfile(root, "brief-example");
 
-    const resolution = await resolveProfile({
+    const resolution = await resolveWithoutModel({
       libraryRoot: root,
       environment: {},
       choice: { kind: "unset" },
@@ -353,7 +353,7 @@ describe("resolveProfile: explicit decisions and default", () => {
     await writeProfile(root, "brief-example");
     await writeRootFile(root, "config.json", '{"schemaVersion":1,');
 
-    const resolution = await resolveProfile({
+    const resolution = await resolveWithoutModel({
       libraryRoot: root,
       environment: {},
       choice: { kind: "unset" },
@@ -375,7 +375,7 @@ describe("resolveProfile: explicit decisions and default", () => {
     await writeProfile(root, "brief-example");
     await writeRootFile(root, "config.json", '{"schemaVersion":1,');
 
-    const resolution = await resolveProfile({
+    const resolution = await resolveWithoutModel({
       libraryRoot: root,
       environment: {},
       choice: { kind: "profile", profileId: "brief-example" },
@@ -399,7 +399,7 @@ describe("resolveProfile: explicit decisions and default", () => {
     }
     await writeRootFile(root, "config.json", '{"schemaVersion":1,"defaultProfileId":null}');
 
-    const resolution = await resolveProfile({
+    const resolution = await resolveWithoutModel({
       libraryRoot: root,
       environment: {},
       choice: { kind: "unset" },
@@ -422,7 +422,7 @@ describe("resolveProfile: off", () => {
     const { base } = await createLibraryFixture(t);
     const brokenRoot = await writeRootFile(base, "not-a-directory", "file");
 
-    const resolution = await resolveProfile({
+    const resolution = await resolveWithoutModel({
       libraryRoot: brokenRoot,
       environment: {},
       choice: { kind: "off" },
@@ -435,7 +435,7 @@ describe("resolveProfile: off", () => {
     const { base } = await createLibraryFixture(t);
     const brokenRoot = await writeRootFile(base, "not-a-directory", "file");
 
-    const resolution = await resolveProfile({
+    const resolution = await resolveWithoutModel({
       libraryRoot: brokenRoot,
       environment: { PI_PREFILL_OFF: "1" },
       choice: { kind: "profile", profileId: "brief-example" },
@@ -452,7 +452,7 @@ describe("resolveProfile: off", () => {
     const { root } = await createLibraryFixture(t);
     await writeRootFile(root, "config.json", '{"schemaVersion":1,');
 
-    const resolution = await resolveProfile({
+    const resolution = await resolveWithoutModel({
       libraryRoot: root,
       environment: { PI_PREFILL_OFF: "1" },
       choice: { kind: "unset" },
@@ -464,7 +464,7 @@ describe("resolveProfile: off", () => {
   it("keeps the identifier out of an environment off when the explicit identifier is invalid", async (t) => {
     const { root } = await createLibraryFixture(t);
 
-    const resolution = await resolveProfile({
+    const resolution = await resolveWithoutModel({
       libraryRoot: root,
       environment: { PI_PREFILL_OFF: "1" },
       choice: { kind: "profile", profileId: "../outside" },
@@ -483,7 +483,7 @@ describe("resolveProfile: off", () => {
         '{"schemaVersion":1,"defaultProfileId":"brief-example"}',
       );
 
-      const resolution = await resolveProfile({
+      const resolution = await resolveWithoutModel({
         libraryRoot: root,
         environment: { PI_PREFILL_OFF: value },
         choice: { kind: "unset" },
@@ -501,7 +501,7 @@ describe("resolveProfile: off", () => {
     const { root } = await createLibraryFixture(t);
     await writeProfile(root, "brief-example");
 
-    const invalidEnvironment = await resolveProfile({
+    const invalidEnvironment = await resolveWithoutModel({
       libraryRoot: root,
       environment: { PI_PREFILL_OFF: "true" },
       choice: { kind: "profile", profileId: "brief-example" },
@@ -516,7 +516,7 @@ describe("resolveProfile: off", () => {
       },
     });
 
-    const explicitOff = await resolveProfile({
+    const explicitOff = await resolveWithoutModel({
       libraryRoot: root,
       environment: { PI_PREFILL_OFF: " 1" },
       choice: { kind: "off" },
@@ -533,7 +533,7 @@ describe("resolveProfile: off", () => {
       '{"schemaVersion":1,"defaultProfileId":"brief-example"}',
     );
 
-    const resolution = await resolveProfile({
+    const resolution = await resolveWithoutModel({
       libraryRoot: root,
       environment: {},
       choice: { kind: "off" },
@@ -559,7 +559,7 @@ describe("loadProfileConfig: library root and read failures", () => {
       },
     });
     assert.deepEqual(
-      await resolveProfile({ libraryRoot: root, environment: {}, choice: { kind: "unset" } }),
+      await resolveWithoutModel({ libraryRoot: root, environment: {}, choice: { kind: "unset" } }),
       {
         status: "failed",
         diagnostic: {
@@ -575,10 +575,10 @@ describe("loadProfileConfig: library root and read failures", () => {
   it("treats a missing library root below an existing directory as having no configuration", async (t) => {
     const { base } = await createLibraryFixture(t);
 
-    assert.deepEqual(await loadProfileConfig(join(base, "absent", "prefills")), {
-      status: "loaded",
-      defaultProfileId: null,
-    });
+    assert.deepEqual(
+      await loadProfileConfig(join(base, "absent", "prefills")),
+      loadedConfiguration(null),
+    );
   });
 
   it("reports a library root that is a regular file as a catalog failure", async (t) => {
@@ -623,12 +623,12 @@ describe("resolveProfile: no reads once off is decided", () => {
     const fileSystemCalls = fileSystemCallRecorder(t);
     const externalCalls = externalCallRecorder(t);
 
-    const forced = await resolveProfile({
+    const forced = await resolveWithoutModel({
       libraryRoot: brokenRoot,
       environment: { PI_PREFILL_OFF: "1" },
       choice: { kind: "profile", profileId: "brief-example" },
     });
-    const explicit = await resolveProfile({
+    const explicit = await resolveWithoutModel({
       libraryRoot: brokenRoot,
       environment: { PI_PREFILL_OFF: "true" },
       choice: { kind: "off" },
@@ -651,7 +651,7 @@ describe("resolveProfile: no reads once off is decided", () => {
     await writeRootFile(root, "config.json", '{"schemaVersion":1,');
     const before = await snapshotTree(root);
 
-    const resolution = await resolveProfile({
+    const resolution = await resolveWithoutModel({
       libraryRoot: root,
       environment: {},
       choice: { kind: "profile", profileId: "brief-example" },
@@ -682,7 +682,7 @@ describe("resolveProfile: side effects", () => {
     const before = await snapshotTree(root);
     const external = externalCallRecorder(t);
 
-    const resolution = await resolveProfile({
+    const resolution = await resolveWithoutModel({
       libraryRoot: root,
       environment: {},
       choice: { kind: "unset" },
@@ -701,7 +701,7 @@ describe("resolveProfile: side effects", () => {
       '{"schemaVersion":1,"defaultProfileId":"absent-profile"}',
     );
 
-    const resolution = await resolveProfile({
+    const resolution = await resolveWithoutModel({
       libraryRoot: root,
       environment: {},
       choice: { kind: "unset" },
@@ -720,8 +720,179 @@ describe("resolveProfile: side effects", () => {
     await linkFile(target, join(root, "config.json"));
     const before = await fs.readFile(target, "utf8");
 
-    await resolveProfile({ libraryRoot: root, environment: {}, choice: { kind: "unset" } });
+    await resolveWithoutModel({ libraryRoot: root, environment: {}, choice: { kind: "unset" } });
 
     assert.equal(await fs.readFile(target, "utf8"), before);
+  });
+});
+
+describe("resolveProfile: bindings and configuration versions", () => {
+  const OTHER_PROFILE = {
+    id: "other-example",
+    name: BRIEF_NAME,
+    description: BRIEF_DESCRIPTION,
+    userText: BRIEF_USER_TEXT,
+    assistantText: BRIEF_ASSISTANT_TEXT,
+  };
+  const CLAUDE = { provider: "anthropic", id: "claude-test" };
+  const GPT = { provider: "openai", id: "gpt-test" };
+  const PROVIDER_RULE =
+    '{"id":"b-11111111","profileId":"brief-example","provider":"anthropic","model":null}';
+  const MODEL_RULE =
+    '{"id":"b-22222222","profileId":"other-example","provider":"anthropic","model":"claude-test"}';
+
+  function configurationOf(...rules: string[]): string {
+    return `{"schemaVersion":2,"defaultProfileId":null,"bindings":[${rules.join(",")}]}`;
+  }
+
+  function bindingFailure(code: string, profileId: string | null) {
+    return {
+      status: "failed",
+      diagnostic: { category: "configuration", code, profileId, candidateOrdinal: null },
+    };
+  }
+
+  // Each case states the whole decision it observes: the document, the recorded choice, the selected
+  // model and the result. Precedence is read from the table, not from the order of the tests.
+  const cases: ReadonlyArray<{
+    readonly label: string;
+    readonly configuration: string | null;
+    readonly choice: ResolveProfileOptions["choice"];
+    readonly model: ResolveProfileOptions["model"];
+    readonly environment?: Readonly<Record<string, string>>;
+    readonly expected: unknown;
+  }> = [
+    {
+      label: "the model rule wins over the provider rule",
+      configuration: configurationOf(PROVIDER_RULE, MODEL_RULE),
+      choice: { kind: "unset" },
+      model: CLAUDE,
+      expected: {
+        status: "selected",
+        source: "binding",
+        profile: OTHER_PROFILE,
+        bindingId: "b-22222222",
+      },
+    },
+    {
+      label: "the provider rule answers for any other model of that provider",
+      configuration: configurationOf(PROVIDER_RULE, MODEL_RULE),
+      choice: { kind: "unset" },
+      model: { provider: "anthropic", id: "claude-other" },
+      expected: {
+        status: "selected",
+        source: "binding",
+        profile: BRIEF_PROFILE,
+        bindingId: "b-11111111",
+      },
+    },
+    {
+      label: "a binding is used before the configured default",
+      configuration: `{"schemaVersion":2,"defaultProfileId":"other-example","bindings":[${MODEL_RULE}]}`,
+      choice: { kind: "unset" },
+      model: CLAUDE,
+      expected: {
+        status: "selected",
+        source: "binding",
+        profile: OTHER_PROFILE,
+        bindingId: "b-22222222",
+      },
+    },
+    {
+      label: "an explicit profile is used before a binding",
+      configuration: configurationOf(MODEL_RULE),
+      choice: { kind: "profile", profileId: "brief-example" },
+      model: CLAUDE,
+      expected: { status: "selected", source: "choice", profile: BRIEF_PROFILE },
+    },
+    {
+      label: "no rule matches another provider and there is no default",
+      configuration: configurationOf(MODEL_RULE),
+      choice: { kind: "unset" },
+      model: GPT,
+      expected: { status: "none" },
+    },
+    {
+      label: "a session without a selected model matches no binding",
+      configuration: `{"schemaVersion":2,"defaultProfileId":"brief-example","bindings":[${PROVIDER_RULE}]}`,
+      choice: { kind: "unset" },
+      model: null,
+      expected: { status: "selected", source: "default", profile: BRIEF_PROFILE },
+    },
+    {
+      label: "a rule that points at no usable profile fails instead of falling back",
+      configuration: `{"schemaVersion":2,"defaultProfileId":"brief-example","bindings":[
+        {"id":"b-33333333","profileId":"absent-profile","provider":"anthropic","model":null}
+      ]}`,
+      choice: { kind: "unset" },
+      model: CLAUDE,
+      expected: bindingFailure("binding-profile-unavailable", "absent-profile"),
+    },
+    {
+      label: "two rules for the same provider and model are rejected",
+      configuration: `{"schemaVersion":2,"defaultProfileId":null,"bindings":[${MODEL_RULE},${'{"id":"b-44444444","profileId":"brief-example","provider":"anthropic","model":"claude-test"}'}]}`,
+      choice: { kind: "unset" },
+      model: CLAUDE,
+      expected: bindingFailure("duplicate-binding", null),
+    },
+    {
+      label: "a malformed binding id is rejected",
+      configuration: `{"schemaVersion":2,"defaultProfileId":null,"bindings":[
+        {"id":"11111111","profileId":"brief-example","provider":"anthropic","model":null}
+      ]}`,
+      choice: { kind: "unset" },
+      model: CLAUDE,
+      expected: bindingFailure("invalid-field", null),
+    },
+    {
+      label: "a version 1 document has no bindings and keeps its default",
+      configuration: '{"schemaVersion":1,"defaultProfileId":"brief-example"}',
+      choice: { kind: "unset" },
+      model: CLAUDE,
+      expected: { status: "selected", source: "default", profile: BRIEF_PROFILE },
+    },
+    {
+      label: "a version 1 document is read with an empty rule list",
+      configuration: '{"schemaVersion":1,"defaultProfileId":null}',
+      choice: { kind: "unset" },
+      model: CLAUDE,
+      expected: { status: "none" },
+    },
+    {
+      label: "the environment off wins over a binding",
+      configuration: configurationOf(PROVIDER_RULE),
+      choice: { kind: "unset" },
+      model: CLAUDE,
+      environment: { PI_PREFILL_OFF: "1" },
+      expected: { status: "off", source: "environment", retainedProfileId: null },
+    },
+    {
+      label: "an explicit off wins over a binding",
+      configuration: configurationOf(PROVIDER_RULE),
+      choice: { kind: "off" },
+      model: CLAUDE,
+      expected: { status: "off", source: "choice", retainedProfileId: null },
+    },
+  ];
+
+  it("resolves the recorded choice, the bindings and the default in one order", async (t) => {
+    const library = await createLibraryFixture(t);
+    await writeProfile(library.root, "brief-example");
+    await writeProfile(library.root, "other-example", briefFiles("other-example"));
+
+    for (const { label, configuration, choice, model, environment, expected } of cases) {
+      const { root } = library;
+      await fs.rm(join(root, "config.json"), { force: true });
+      if (configuration !== null) await writeRootFile(root, "config.json", configuration);
+
+      const resolution = await resolveProfile({
+        libraryRoot: root,
+        environment: environment ?? {},
+        choice,
+        model,
+      });
+
+      assert.deepEqual(resolution, expected, label);
+    }
   });
 });

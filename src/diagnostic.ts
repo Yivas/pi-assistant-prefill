@@ -14,6 +14,8 @@ export type ProfileDiagnosticCode =
   | "candidate-limit-exceeded"
   | "profile-unavailable"
   | "default-profile-unavailable"
+  | "binding-profile-unavailable"
+  | "duplicate-binding"
   | "environment-invalid"
   | "agent-directory-unsupported"
   | "invalid-id"

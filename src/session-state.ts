@@ -1,3 +1,4 @@
+import { isBindingId, isRegistryIdentifier } from "./config.ts";
 import type { PiReadonlySessionManager, PiSessionEntry } from "./extension-types.ts";
 import { isProfileId } from "./profiles.ts";
 
@@ -5,13 +6,6 @@ import { isProfileId } from "./profiles.ts";
 // writing them never changes what a request contains. Only the projection reads them back.
 export const APPLICATION_ENTRY_TYPE = "pi-assistant-prefill.application";
 export const DIAGNOSTIC_ENTRY_TYPE = "pi-assistant-prefill.diagnostic";
-
-// Provider and API that Pi 1.1.0 gives to physical Anthropic chat models (pi-ai catalog). A virtual
-// model carries api "pi-virtual" instead, and Pi does not export that constant, so the check uses
-// the positive pair and a virtual selection never matches it. This is a conservative rule: another
-// provider that speaks the same protocol is treated as not Anthropic (see docs/projection.md).
-export const ANTHROPIC_PROVIDER = "anthropic";
-export const ANTHROPIC_API = "anthropic-messages";
 
 // Record data carries its own format version, independent of the profile and selection formats.
 const RECORD_SCHEMA_VERSION = 1;
@@ -22,9 +16,16 @@ const APPLICATION_FIELDS = [
   "profileId",
   "revision",
   "combinedBytes",
+  "source",
+  "bindingId",
+  "provider",
+  "model",
 ] as const;
 const DIAGNOSTIC_FIELDS = ["schemaVersion", "reason", "profileId", "detail"] as const;
 const APPLICATION_PHASES = ["intent", "projected", "committed"] as const;
+const APPLICATION_SOURCES = ["manual", "binding", "default"] as const;
+// `destination-not-anthropic` is retired: no handler writes it, but sessions of 0.1.x still carry it,
+// so it stays a readable reason instead of turning those branches into invalid ones.
 const DIAGNOSTIC_REASONS = [
   "invalid-record",
   "selection-incompatible",
@@ -44,14 +45,21 @@ const APPLICATION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}
 const REVISION_PATTERN = /^[0-9a-f]{64}$/;
 
 export type ApplicationPhase = (typeof APPLICATION_PHASES)[number];
+export type ApplicationSource = (typeof APPLICATION_SOURCES)[number];
 export type PrefixDiagnosticReason = (typeof DIAGNOSTIC_REASONS)[number];
 
 // The profile text is not stored. The revision is a SHA-256 hex digest of the three profile files.
+// The provenance fields were added after the first record format: null means the record predates
+// them, so a branch written by an earlier version still reads as it did.
 export interface ApplicationRecord {
   readonly applicationId: string;
   readonly profileId: string;
   readonly revision: string;
   readonly combinedBytes: number;
+  readonly source: ApplicationSource | null;
+  readonly bindingId: string | null;
+  readonly provider: string | null;
+  readonly model: string | null;
 }
 
 // Safe to store and show: identifiers, a reason and a category/code pair. Never text or paths.
@@ -79,7 +87,10 @@ export type ApplicationStatus =
       readonly profileId: string;
       readonly revision: string;
       readonly combinedBytes: number;
-      readonly suspended: boolean;
+      readonly source: ApplicationSource | null;
+      readonly bindingId: string | null;
+      readonly provider: string | null;
+      readonly model: string | null;
       readonly refreshes: number;
     };
 
@@ -97,8 +108,8 @@ const INVALID_BRANCH: BranchPrefixState = { kind: "invalid" };
 
 // Derives the state of one branch from its entries alone. Nothing is written, so re-deriving after
 // a restart or a navigation yields the same state. Any record that does not match the format makes
-// the whole branch invalid: a corrupt record is never read as a valid state. Destination diagnostics
-// report an observation and do not change the state; the suspension is read from the responses.
+// the whole branch invalid: a corrupt record is never read as a valid state. Diagnostic entries
+// report an observation and do not change the state.
 export function deriveBranchPrefixState(branch: readonly PiSessionEntry[]): BranchPrefixState {
   let open: OpenApplication | null = null;
   for (const entry of branch) {
@@ -140,41 +151,12 @@ function sameRecord(left: ApplicationRecord, right: ApplicationRecord): boolean 
     left.applicationId === right.applicationId &&
     left.profileId === right.profileId &&
     left.revision === right.revision &&
-    left.combinedBytes === right.combinedBytes
+    left.combinedBytes === right.combinedBytes &&
+    left.source === right.source &&
+    left.bindingId === right.bindingId &&
+    left.provider === right.provider &&
+    left.model === right.model
   );
-}
-
-// True when the latest assistant response of the branch came from a destination other than
-// physical Anthropic. Pi persists provider and api on every assistant message, so this is the
-// observed destination, not the selection. The projection stays suspended while it is true.
-export function latestDestinationIncompatible(branch: readonly PiSessionEntry[]): boolean {
-  for (let index = branch.length - 1; index >= 0; index -= 1) {
-    const entry = branch[index];
-    if (entry?.type === "message" && entry.message?.role === "assistant") {
-      return !isAnthropicDestination(entry.message);
-    }
-  }
-  return false;
-}
-
-// True when the latest assistant response is not Anthropic and the response before it was Anthropic,
-// or there was none. That is the moment a branch leaves physical Anthropic. A repeated response from
-// the same destination is not a change, so it is not reported again.
-export function destinationChangedToIncompatible(branch: readonly PiSessionEntry[]): boolean {
-  const responses = branch.filter(
-    (entry) => entry.type === "message" && entry.message?.role === "assistant",
-  );
-  const latest = responses.at(-1)?.message;
-  const previous = responses.at(-2)?.message;
-  if (latest === undefined || isAnthropicDestination(latest)) return false;
-  return previous === undefined || isAnthropicDestination(previous);
-}
-
-export function isAnthropicDestination(value: {
-  readonly provider?: string;
-  readonly api?: string;
-}): boolean {
-  return value.provider === ANTHROPIC_PROVIDER && value.api === ANTHROPIC_API;
 }
 
 // True when the branch already holds a message of the conversation. A new application may only
@@ -240,10 +222,41 @@ function readApplicationData(data: unknown): ApplicationEntry | null {
   if (typeof revision !== "string" || !REVISION_PATTERN.test(revision)) return null;
   if (typeof combinedBytes !== "number" || !Number.isSafeInteger(combinedBytes)) return null;
   if (combinedBytes < 0) return null;
+  const provenance = readProvenance(data);
+  if (provenance === null) return null;
   return {
     phase,
-    application: { applicationId, profileId, revision, combinedBytes },
+    application: { applicationId, profileId, revision, combinedBytes, ...provenance },
   };
+}
+
+// The provenance fields were added after the first format. Absent and null both mean "not recorded";
+// a present value outside the format makes the whole record invalid, as any other broken field does.
+function readProvenance(data: Record<string, unknown>): Provenance | null {
+  const source = readOptionalField(data.source, isApplicationSource);
+  const bindingId = readOptionalField(data.bindingId, isBindingId);
+  const provider = readOptionalField(data.provider, isRegistryIdentifier);
+  const model = readOptionalField(data.model, isRegistryIdentifier);
+  if (
+    source === undefined ||
+    bindingId === undefined ||
+    provider === undefined ||
+    model === undefined
+  ) {
+    return null;
+  }
+  return { source, bindingId, provider, model };
+}
+
+type Provenance = Pick<ApplicationRecord, "source" | "bindingId" | "provider" | "model">;
+
+// Undefined means the value is present but outside the format. Null means it is not recorded.
+function readOptionalField<T>(
+  value: unknown,
+  isValid: (candidate: unknown) => candidate is T,
+): T | null | undefined {
+  if (value === undefined || value === null) return null;
+  return isValid(value) ? value : undefined;
 }
 
 function readDiagnosticData(data: unknown): PrefixDiagnostic | null {
@@ -266,6 +279,10 @@ function isRecordWithFields(
 
 function isApplicationPhase(value: unknown): value is ApplicationPhase {
   return (APPLICATION_PHASES as readonly unknown[]).includes(value);
+}
+
+function isApplicationSource(value: unknown): value is ApplicationSource {
+  return (APPLICATION_SOURCES as readonly unknown[]).includes(value);
 }
 
 function isDiagnosticReason(value: unknown): value is PrefixDiagnosticReason {

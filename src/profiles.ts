@@ -300,7 +300,9 @@ function readLabel(object: JsonObject, field: string): string {
   return value;
 }
 
-function hasControlCharacter(value: string): boolean {
+// Shared with the configuration and the session records: a provider or model identifier that carries
+// a control character cannot be shown as it is.
+export function hasControlCharacter(value: string): boolean {
   for (const character of value) {
     const code = character.codePointAt(0) ?? 0;
     if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) return true;

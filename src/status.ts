@@ -5,7 +5,7 @@ import { renderMessage } from "./messages.ts";
 import type { ProfileSnapshot } from "./profiles.ts";
 import type { ProfileSummary, SelectorResult, SelectorStatus } from "./selector.ts";
 import { combinedContentBytes, OPERATIONAL_SIZE_LIMIT_BYTES } from "./selector.ts";
-import type { ApplicationStatus } from "./session-state.ts";
+import type { ApplicationSource, ApplicationStatus } from "./session-state.ts";
 
 // Presentation escapes: line and paragraph separators and the Unicode bidirectional controls
 // would break lines or reorder text on screen, so they are shown as \uXXXX notation.
@@ -262,9 +262,39 @@ function renderApplication(application: ApplicationStatus): string[] {
           refreshes: application.refreshes,
         }),
       ];
-      if (application.suspended) lines.push(renderMessage("status.applicationSuspended"));
+      lines.push(renderProvenance(application));
+      if (application.provider !== null && application.model !== null) {
+        lines.push(
+          renderMessage("status.applicationModel", {
+            provider: escapeLabel(application.provider),
+            model: escapeLabel(application.model),
+          }),
+        );
+      }
       return lines;
     }
+  }
+}
+
+// The provenance is the one stored in the record, not a resolution of the current configuration: a
+// binding that was removed since then still reads as the rule that chose this profile.
+function renderProvenance(application: {
+  readonly source: ApplicationSource | null;
+  readonly bindingId: string | null;
+}): string {
+  switch (application.source) {
+    case "manual":
+      return renderMessage("status.applicationProvenance.manual");
+    case "binding":
+      return application.bindingId === null
+        ? renderMessage("status.applicationProvenance.bindingUnknown")
+        : renderMessage("status.applicationProvenance.binding", {
+            bindingId: application.bindingId,
+          });
+    case "default":
+      return renderMessage("status.applicationProvenance.default");
+    case null:
+      return renderMessage("status.applicationProvenance.unknown");
   }
 }
 

@@ -124,8 +124,8 @@ What it does not show: the terminal UI's tree picker keys. Navigation was driven
 Some behaviour is checked by unit tests only, because the checks cannot reach it end to end:
 - the pending stop and the pending block (above);
 - the eligibility judged at the start of the turn, separately from the freshness check: «judges a branch with a conversation as not eligible, even when the request holds only the prompt». Removing that defence makes the test fail, which was checked by a temporary mutation of the source;
-- a model of another provider that speaks the Anthropic messages API is treated as not Anthropic (`selection-incompatible`);
-- a departure from Anthropic is reported for a response to a request refused for the selection, as well as for a projected request.
+- a virtual model selection is refused when an application would start (`selection-incompatible`), while any non-virtual model is eligible;
+- the profile chosen by a binding is resolved from the model selected when the application starts. The real run against the local Anthropic and OpenAI-compatible doubles is recorded in [compatibility.md](compatibility.md).
 
 ## Manual steps
 

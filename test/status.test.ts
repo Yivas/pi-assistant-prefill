@@ -215,7 +215,7 @@ describe("selection notices", () => {
     assert.equal(
       renderSelectorText(result),
       [
-        "Selected big-example. The choice is recorded for this agent directory. A session records an application when it starts on a physical Anthropic model with an empty branch, unless PI_PREFILL_OFF is 1.",
+        "Selected big-example. The choice is recorded for this agent directory. A session records an application when it starts on a non-virtual model with an empty branch, unless PI_PREFILL_OFF is 1.",
         "The combined content is 16386 bytes, above the 16 KiB operational threshold.",
       ].join("\n"),
     );
@@ -263,7 +263,7 @@ describe("reload text", () => {
     const result: SelectorResult = {
       kind: "reloaded",
       catalog: { status: "loaded", profiles: [], diagnostics: [] },
-      configuration: { status: "loaded", defaultProfileId: null },
+      configuration: { status: "loaded", defaultProfileId: null, bindings: [] },
     };
 
     assert.equal(
@@ -288,7 +288,7 @@ describe("reload text", () => {
           candidateOrdinal: null,
         },
       },
-      configuration: { status: "loaded", defaultProfileId: null },
+      configuration: { status: "loaded", defaultProfileId: null, bindings: [] },
     };
 
     assert.equal(
@@ -412,18 +412,23 @@ describe("application state text", () => {
         profileId: "brief-example",
         revision,
         combinedBytes: 77,
-        suspended: false,
+        source: "manual",
+        bindingId: null,
+        provider: "openai",
+        model: "gpt-test",
         refreshes: 0,
       }),
       [
         "Pending choice: none",
         "Explicit off: no",
         `Application not committed yet: brief-example (application ${applicationId}, revision ${revision}, 77 bytes). No completed request carried it. While it stays pending, no new application starts on this branch.`,
+        "Provenance: a profile chosen with /prefill.",
+        "Model selected when it was applied: openai/gpt-test.",
       ].join("\n"),
     );
   });
 
-  it("reports a committed application with its refresh count and no suspension line", () => {
+  it("reports a committed application with its refresh count and its provenance", () => {
     assert.equal(
       textWith({
         kind: "committed",
@@ -431,31 +436,38 @@ describe("application state text", () => {
         profileId: "brief-example",
         revision,
         combinedBytes: 77,
-        suspended: false,
+        source: "binding",
+        bindingId: "b-1a2b3c4d",
+        provider: "anthropic",
+        model: "claude-test",
         refreshes: 2,
       }),
       [
         "Pending choice: none",
         "Explicit off: no",
         `Application committed in this branch: brief-example was projected into a completed request (application ${applicationId}, revision ${revision}, 77 bytes). Warm refresh decisions counted: 2.`,
+        "Provenance: binding b-1a2b3c4d.",
+        "Model selected when it was applied: anthropic/claude-test.",
       ].join("\n"),
     );
   });
 
-  it("reports an unsupported destination as its own line, apart from the commitment", () => {
-    const text = textWith({
+  it("reports a record written before the provenance fields as not recorded", () => {
+    const lines = textWith({
       kind: "committed",
       applicationId,
       profileId: "brief-example",
       revision,
       combinedBytes: 77,
-      suspended: true,
+      source: null,
+      bindingId: null,
+      provider: null,
+      model: null,
       refreshes: 0,
-    });
-    const lines = text.split("\n");
+    }).split("\n");
+
     assert.equal(lines.length, 4);
-    assert.match(lines[2] ?? "", /^Application committed in this branch: brief-example /);
-    assert.match(lines[3] ?? "", /^Unsupported destination: /);
+    assert.equal(lines[3], "Provenance: not recorded; this record predates the field.");
   });
 
   it("reports an invalid branch and an empty branch", () => {

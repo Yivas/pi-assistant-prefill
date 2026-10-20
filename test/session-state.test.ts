@@ -9,7 +9,6 @@ import {
   deriveBranchPrefixState,
   hasConversation,
   lastDiagnostic,
-  latestDestinationIncompatible,
   type PrefixDiagnostic,
   sameDiagnostic,
 } from "../src/session-state.ts";
@@ -80,6 +79,10 @@ describe("deriveBranchPrefixState: records in order", () => {
         profileId: "brief-example",
         revision: REVISION,
         combinedBytes: 77,
+        source: null,
+        bindingId: null,
+        provider: null,
+        model: null,
       },
     });
   });
@@ -150,6 +153,10 @@ describe("deriveBranchPrefixState: invalid records", () => {
     record("intent", { combinedBytes: -1 }),
     record("intent", { combinedBytes: 1.5 }),
     record("intent", { combinedBytes: "77" }),
+    record("intent", { source: "auto" }),
+    record("intent", { bindingId: "11111111" }),
+    record("intent", { provider: "openai\u0007" }),
+    record("intent", { model: 7 }),
   ];
 
   for (const data of invalidCases) {
@@ -203,32 +210,6 @@ describe("deriveBranchPrefixState: destination reports", () => {
       ),
     );
     assert.deepEqual(state, { kind: "none" });
-  });
-});
-
-describe("latestDestinationIncompatible", () => {
-  const anthropicResponse = {
-    type: "message",
-    message: { role: "assistant", provider: "anthropic", api: "anthropic-messages" },
-  };
-  const openaiResponse = {
-    type: "message",
-    message: { role: "assistant", provider: "openai", api: "openai-responses" },
-  };
-
-  it("reads the provider and api of the latest assistant response", () => {
-    assert.equal(latestDestinationIncompatible(branchOf(anthropicResponse)), false);
-    assert.equal(latestDestinationIncompatible(branchOf(anthropicResponse, openaiResponse)), true);
-    assert.equal(latestDestinationIncompatible(branchOf(openaiResponse, anthropicResponse)), false);
-  });
-
-  it("ignores entries that are not assistant responses and reads none as compatible", () => {
-    assert.equal(
-      latestDestinationIncompatible(branchOf(openaiResponse, messageEntry("user"))),
-      true,
-    );
-    assert.equal(latestDestinationIncompatible(branchOf(messageEntry("user"))), false);
-    assert.equal(latestDestinationIncompatible([]), false);
   });
 });
 

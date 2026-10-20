@@ -7,6 +7,7 @@ import type {
   PiCommandContext,
   PiExtensionApi,
   PiExtensionMode,
+  PiModelRegistry,
   PiNoticeType,
 } from "../src/extension-types.ts";
 import prefillExtension, {
@@ -436,6 +437,7 @@ describe("executeSelectorCommand: list, preview and reload", () => {
     assert.deepEqual(result.configuration, {
       status: "loaded",
       defaultProfileId: "brief-example",
+      bindings: [],
     });
     assert.deepEqual(await snapshotTree(library.options.libraryRoot), before);
     assert.deepEqual(await readSelection(library.options.stateDirectory), {
@@ -509,6 +511,7 @@ interface Recording {
 function recordingContext(
   mode: PiExtensionMode,
   pick: (options: readonly string[]) => string | undefined = () => undefined,
+  modelRegistry?: PiModelRegistry,
 ): Recording {
   const entries: Recording["entries"] = [];
   const notices: Recording["notices"] = [];
@@ -520,6 +523,7 @@ function recordingContext(
   const context: PiCommandContext = {
     mode,
     sessionManager: { getLeafId: () => null, getBranch: () => [] },
+    ...(modelRegistry === undefined ? {} : { modelRegistry }),
     ui: {
       notify: (message, type) => {
         notices.push({ message, type });
@@ -579,7 +583,7 @@ describe("handlePrefillCommand by mode", () => {
     assert.deepEqual(recording.notices, [
       {
         message:
-          "Selected brief-example. The choice is recorded for this agent directory. A session records an application when it starts on a physical Anthropic model with an empty branch, unless PI_PREFILL_OFF is 1.",
+          "Selected brief-example. The choice is recorded for this agent directory. A session records an application when it starts on a non-virtual model with an empty branch, unless PI_PREFILL_OFF is 1.",
         type: "info",
       },
     ]);
@@ -724,7 +728,7 @@ describe("handlePrefillCommand by mode", () => {
     assert.deepEqual(recording.notices, [
       {
         message:
-          "Selected brief-example. The choice is recorded for this agent directory. A session records an application when it starts on a physical Anthropic model with an empty branch, unless PI_PREFILL_OFF is 1.",
+          "Selected brief-example. The choice is recorded for this agent directory. A session records an application when it starts on a non-virtual model with an empty branch, unless PI_PREFILL_OFF is 1.",
         type: "info",
       },
     ]);
@@ -1024,7 +1028,7 @@ describe("the prefill menu", () => {
     assert.deepEqual(recording.offered, [MENU]);
     const title = recording.titles[0] ?? "";
     assert.match(title, /^Prefill\n/);
-    assert.match(title, /Choice: none yet/);
+    assert.match(title, /Choice: automatic \(bindings: 0\)/);
     assert.match(title, /Library: 1 valid, 0 left out/);
     assert.match(title, /Folder: /);
     assert.deepEqual(recording.notices, []);
@@ -1074,4 +1078,52 @@ describe("the prefill menu", () => {
       choice: { kind: "unset" },
     });
   });
+});
+
+// Two providers, one of them without credentials, so the menu has to mark it.
+const MODEL_REGISTRY: PiModelRegistry = {
+  getAll: () => [
+    { provider: "zeta", api: "openai-responses", id: "gpt-test" },
+    { provider: "alpha", api: "anthropic-messages", id: "claude-test" },
+  ],
+  getAvailable: () => [{ provider: "alpha", api: "anthropic-messages", id: "claude-test" }],
+};
+
+it("adds a binding from the menu through the host select dialog", async (t) => {
+  const library = await libraryWith(t, ["brief-example"]);
+  let step = 0;
+  const recording = recordingContext(
+    "tui",
+    (options) => {
+      step += 1;
+      if (step === 1) return options.find((label) => label === "Manage bindings");
+      if (step === 2) return "Add a binding";
+      if (step === 3) return options[0];
+      if (step === 4) return options.find((label) => label === "alpha");
+      // The provider rule is the first entry of the model list; the sixth dialog is the submenu
+      // opened again after the save, and closing it ends the menu.
+      return step === 5 ? options[0] : undefined;
+    },
+    MODEL_REGISTRY,
+  );
+
+  await handlePrefillCommand(
+    "",
+    recording.context,
+    resolvedOptions(library.options),
+    recording.appendEntry,
+  );
+
+  assert.deepEqual(recording.offered[3], ["alpha", "zeta (no credentials)"]);
+  assert.deepEqual(recording.offered[4], ["(any model of alpha)", "claude-test"]);
+  const stored = JSON.parse(
+    await fs.readFile(join(library.options.libraryRoot, "config.json"), "utf8"),
+  );
+  assert.equal(stored.schemaVersion, 2);
+  assert.deepEqual(
+    stored.bindings.map((binding: { id: string }) => ({ ...binding, id: "generated" })),
+    [{ id: "generated", profileId: "brief-example", provider: "alpha", model: null }],
+  );
+  assert.equal(recording.notices.at(-1)?.type, "info");
+  assert.match(recording.notices.at(-1)?.message ?? "", /^Binding saved\./);
 });

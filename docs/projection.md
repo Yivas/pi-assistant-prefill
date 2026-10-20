@@ -13,11 +13,11 @@ The package adds a user message and an assistant message from the profile in fro
 A new application starts only when all of these hold:
 
 - the branch has no conversation (see [Eligibility](#eligibility));
-- the selection resolves to a profile, using the library's rules: a recorded choice, or else the configured default. `PI_PREFILL_OFF=1`, a recorded explicit off, or no profile means nothing is projected;
-- the selected model is a physical Anthropic chat model (see [Compatibility](#compatibility));
+- the selection resolves to a profile, using the library's rules: a recorded choice, a binding for the selected provider and model, or else the configured default. `PI_PREFILL_OFF=1`, a recorded explicit off, or no profile means nothing is projected;
+- the selected model is not a virtual one (see [Compatibility](#compatibility));
 - the profile reads and matches the revision recorded in the application record (see [Revision](#revision)).
 
-A continued application needs only the revision and a compatible selection. A committed application keeps projecting in its branch while the profile is unchanged and the selection is compatible, unless the destination check suspends it (see [Destination](#destination)).
+A continued application needs only the revision and an eligible selection. A committed application keeps projecting in its branch while the profile is unchanged and the selection stays eligible.
 
 ## Eligibility
 
@@ -49,13 +49,13 @@ The package writes custom entries. Their data never contains profile text.
 | `pi-assistant-prefill.application` | `intent` | Before the first projected request of a new application. |
 | `pi-assistant-prefill.application` | `projected` | Once, in the same handler, when the request is projected. |
 | `pi-assistant-prefill.application` | `committed` | At the `turn_end` boundary of the first completed response (no error, no abort) of a request that carried the example, whatever the destination of that response. |
-| `pi-assistant-prefill.diagnostic` | a reason from the table below | When an expected failure refuses a request, or when the branch leaves Anthropic. |
+| `pi-assistant-prefill.diagnostic` | a reason from the list below | When an expected failure refuses a request. |
 
-An application record holds `schemaVersion`, `phase`, `applicationId` (a random UUID per application), `profileId`, `revision` and `combinedBytes` (the length of the two texts in UTF-8 bytes). The `revision` is a SHA-256 digest of the three profile files, so it is a summary of their content, and it is stored in the session file.
+An application record holds `schemaVersion`, `phase`, `applicationId` (a random UUID per application), `profileId`, `revision` and `combinedBytes` (the length of the two texts in UTF-8 bytes). It also holds the provenance of the decision: `source` (`manual`, `binding` or `default`), `bindingId` (the rule that won, or `null`), and the `provider` and `model` identifiers the selection carried. Those four fields are optional in the stored format, and a record written before they existed reads with each one as `null`. The `revision` is a SHA-256 digest of the three profile files, so it is a summary of their content, and it is stored in the session file.
 
 A branch holds at most one application, and its phases must follow `intent`, `projected`, `committed` for one identifier. Any other order, a second identifier, an unknown field or a value outside the format makes the branch `invalid`: nothing is projected into it, and `/prefill status` says so.
 
-Diagnostic reasons: `invalid-record`, `selection-incompatible`, `library-failed` (with the library's category and code), `profile-unavailable` (with the category and code when the files cannot be read), `revision-mismatch` and `destination-not-anthropic`.
+Diagnostic reasons: `invalid-record`, `selection-incompatible`, `library-failed` (with the library's category and code), `profile-unavailable` (with the category and code when the files cannot be read) and `revision-mismatch`. A branch written by 0.1.x can also hold `destination-not-anthropic`: nothing writes it any more, and the value is still read so those branches stay readable instead of turning invalid.
 
 The state is read from the active branch only. Nothing is written when a session starts, and the state is derived again on `session_start` and `session_tree`, so a restart does not duplicate records.
 
@@ -75,29 +75,28 @@ While an application is pending (intent or projection without commitment), the p
 
 After the commitment, a warm refresh decision is left alone and counted. The count is of decisions made by `cache_warming_decision`, not of requests the provider actually received. It lives in memory, per application, so reloading Pi resets it, and it is shown by `/prefill status`.
 
-## Destination
+## The selected model
 
-The compatibility of a request is decided by the selection: the model the user chose. The destination of each response is read from the assistant message that Pi records (its provider and API).
+The compatibility of a request is decided by the selection: the model the user chose, with its provider and its model identifier. The models a provider rule or a model rule matches are those identifiers, as Pi's registry writes them.
 
-The destination does not decide the commitment. A completed response to a request that carried the example commits the application, whatever its destination. The destination decides only whether later requests carry the example.
-
-While the latest assistant response of the branch came from another destination, the projection is suspended for that branch. The request goes out without the example, and its response comes from the selected model. A physical Anthropic selection answers from Anthropic, which clears the suspension. `/prefill status` shows both facts: the commitment, and a separate line for the unsupported destination.
-
-A report is written when the branch leaves Anthropic: the response is not Anthropic and the response before it was Anthropic or absent. The report is written at the boundary of that response, whether its request carried the example or was refused for the selection, because the response still comes from a destination. A repeated response from the same destination is not reported again. Each new departure from Anthropic is reported again, after a return to Anthropic.
+Pi converts the messages of a request into the protocol of the provider it dispatches to, so the example is sent in whatever shape that provider expects. The rule therefore does not name a protocol or an endpoint: an Anthropic model and a model of another provider are both eligible, and a router that Pi exposes as a physical model is eligible too.
 
 ## Changes after the commitment
 
 Turning the profile off, choosing another profile, or changing the model affects only later requests:
 
 - the committed example of a branch stays in its branch and continues to be projected while the profile matches its revision;
-- a selected model that is not a physical Anthropic model (including a virtual model, see [Compatibility](#compatibility)) sends the request without the example and writes a diagnostic;
+- a virtual selected model (see [Compatibility](#compatibility)) sends the request without the example and writes a diagnostic;
+- changing the model of a committed branch sends the same prefix to the new provider. The commitment and its provenance stay as recorded: they describe the decision that applied the example, not the destination of later requests;
 - a changed profile, or a profile that cannot be read, sends the request without the example and writes a diagnostic.
 
 ## Compatibility
 
-The selection decides compatibility. A selected model is compatible when its provider is `anthropic` and its API is `anthropic-messages`. Pi 1.1.0 uses these values for the physical Anthropic chat models of its catalog. A virtual model carries the API `pi-virtual`, so it never matches. Pi does not export that constant, so the check does not depend on it.
+The selection decides eligibility, and a selected model is eligible when its API is not `pi-virtual`. Pi gives that API to its virtual models, which it routes itself instead of sending them to a provider of their own, and it does not export the constant. Every physical model of every provider is eligible, whatever protocol it speaks.
 
-The rule is conservative and checks the provider label and the API, not the endpoint. Any other provider that speaks the same protocol is treated as not Anthropic, and an Anthropic label with a different endpoint is treated as Anthropic. Matching the protocol alone would be a guess about the provider.
+Pi converts the conversation into the protocol of the selected provider, so the example travels with the request instead of being written for one provider's format. What the package does not do is check the endpoint behind a provider label: the rule compares the provider and model identifiers of the selection, never the destination of a response.
+
+Disabling the example with `PI_PREFILL_OFF` or with an explicit off stops new applications. It does not retract a pair already sent in requests of this branch.
 
 ## Status
 
@@ -105,7 +104,7 @@ The rule is conservative and checks the provider label and the API, not the endp
 
 - none: no application in this branch;
 - not committed yet: the application identifier, the revision and the size;
-- committed: the same metadata, the warm refresh decisions counted, and whether the branch's latest response came from an unsupported destination (a separate line, which does not change the commitment);
+- committed: the same metadata, the warm refresh decisions counted, the provenance stored in the record (a line of its own: a chosen profile, a binding with its identifier, the configured default, or `not recorded` for a record from an earlier version) and, when the record carries them, the provider and model of the selection;
 - invalid: the records cannot be read, so nothing is projected;
 - indeterminate: the command received no session, for example in a mode without one.
 
@@ -128,10 +127,11 @@ The automated suite (`npm run check`) covers, with a simulated host and temporar
 - the commitment after a completed projected request, the request really carrying the pair, pair text blocks only, no profile text in records, no commitment on error or abort, retries within a run, and no second commitment;
 - continuity after a restart, branch navigation, and that session start writes nothing;
 - revision mismatch and a deleted profile, each reported once, with projection resumed after a revert;
-- virtual and non-Anthropic selections, a provider other than Anthropic that speaks the Anthropic messages API (treated as not Anthropic), suspension and resumption, repeated departures from Anthropic reported again, and a departure reported for a request refused for the selection;
+- a virtual selection, refused with a diagnostic, at the start of an application and on a committed branch;
+- an application that a binding chose for a model of another provider, with the binding identifier and the provider and model recorded as its provenance;
+- the state reported to `/prefill status`: none, not committed, committed with its provenance, a record written before the provenance fields, and invalid;
 - the eligibility judged at the start of the turn, separately from the freshness check: a branch that holds a conversation is not eligible even when the request holds only the prompt;
 - the cache warming stop while pending, and the decision count after the commitment;
-- the state reported to `/prefill status`: none, not committed, committed with and without an unsupported destination, and invalid;
 - a turn that ends and a run without `before_agent_start`, and a transcript that already holds a conversation;
 - an invalid application record, refused and reported;
 - unusable library root and unreadable selection, reported as diagnostics without throwing;
@@ -163,11 +163,10 @@ The result recorded for Pi 1.1.0 is exit code 0. A negative control, one handler
 - The 16 KiB figure is a selection-time advisory only: choosing a profile above it reports the size, and the projection records the applied size, but nothing enforces the threshold.
 - No real provider was used. The behavior described here is tested with a host double.
 - Only Pi 1.1.0 was read and checked. Other versions are not checked.
-- The Anthropic rule checks the provider label and the API, not the endpoint (see [Compatibility](#compatibility)).
 - Another `context` handler, running after this one, can remove the pair. The commitment does not change in that case.
 - The revision is a digest of the file content, stored in the session file. It is a summary, not the content.
 - Messages from other extensions in the first request (`nextTurn`) are not part of the eligibility rule, and the freshness check refuses the start when they are present.
-- The compatibility of a request is decided from its selected model, so a change of endpoint under the same label is not detected.
+- The eligibility rule reads the provider label and the API of the selected model, not the endpoint behind it, so a change of endpoint under the same label is not detected.
 - The warm refresh counts live in memory and are lost when Pi reloads.
 - If the host does not resolve the assistant identifier at `turn_end`, the application stays pending with no retry.
 - A profile changed between the revision check and the provider's reading of the request is not detected.

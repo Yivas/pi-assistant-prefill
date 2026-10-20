@@ -1,13 +1,13 @@
 # The `/prefill` command
 
-`/prefill` chooses a profile from the local library, records an explicit disable, shows the recorded state, previews a profile and reloads the catalog. In the TUI, its menu also creates and edits profiles. The chosen example is applied to new eligible sessions as described in [projection.md](projection.md). Choosing only records the choice and says so in its result.
+`/prefill` chooses a profile from the local library, records an explicit disable, shows the recorded state, previews a profile and reloads the catalog. In the TUI, its menu also creates and edits profiles, records an automatic selection and adds or removes the binding rules in the library configuration. The chosen example is applied to new eligible sessions as described in [projection.md](projection.md). Choosing only records the choice and says so in its result.
 
 ## Status and verification
 
 - The extension source is in this repository and ships in the published package `pi-assistant-prefill`, installed with `pi install npm:pi-assistant-prefill@0.1.1`.
 - The automated suite (`npm run check`) calls the command with a simulated context and a temporary library. It does not start Pi.
 - The structural types in `src/extension-types.ts` were checked with the TypeScript compiler against the declarations in `dist/core/extensions/types.d.ts` of Pi 1.1.0, from a temporary directory outside the repository, as described in [projection.md](projection.md#verification). That check is not part of `npm run check`.
-- The manual check in [Manual isolated check](#manual-isolated-check) ran on 2026-10-13 (local time) on Windows 10.0.26300 with Node.js v24.9.0 and Pi 1.1.0. A TUI check on 2026-10-15 on Windows with Pi 1.1.0 and a temporary agent directory showed the menu's own list, built with `ctx.ui.custom`, with its title, recorded state, library folder, `Search:` line, a description per option and the key hint. Typing `cho` filtered the list, Enter opened the profile dialog, and picking a profile recorded `selection.json`. Create asked for an id, name, description and both example texts, and wrote valid `profile.json`, `user.md` and `assistant.md` files. Edit and Preview opened from the menu were tested with a simulated context only. No other Pi version, platform or model provider was checked.
+- The manual check in [Manual isolated check](#manual-isolated-check) ran on 2026-10-13 (local time) on Windows 10.0.26300 with Node.js v24.9.0 and Pi 1.1.0. A TUI check on 2026-10-15 on Windows with Pi 1.1.0 and a temporary agent directory showed the menu's own list, built with `ctx.ui.custom`, with its title, recorded state, library folder, `Search:` line, a description per option and the key hint. Typing `cho` filtered the list, Enter opened the profile dialog, and picking a profile recorded `selection.json`. Create asked for an id, name, description and both example texts, and wrote valid `profile.json`, `user.md` and `assistant.md` files. Edit and Preview opened from the menu were tested with a simulated context only. In a separate check on 2026-10-15, in the real TUI with a temporary agent directory, Manage bindings opened, Add offered a profile and then the providers of Pi's model registry, marking `(no credentials)` on the providers without credentials, and the model list ended with `(any model of <provider>)`. Choosing that entry wrote `config.json` with `schemaVersion: 2` and the rule. No other Pi version, platform or model provider was checked.
 
 ## Subcommands
 
@@ -17,11 +17,11 @@
 | `/prefill list` | Lists the valid profiles. In the interactive TUI it opens the direct profile selector with them and an entry that records an explicit disable. |
 | `/prefill use <id>` | Records `<id>` as the pending choice after checking that the catalog has a valid profile with that identifier. |
 | `/prefill off` | Records an explicit disable and clears any pending choice. |
-| `/prefill status` | Shows the pending choice, whether an explicit disable is recorded, the environment disable if any, the application state of the current branch (see [projection.md](projection.md#status)). |
+| `/prefill status` | Shows the pending choice, whether an explicit disable is recorded, the environment disable if any, the application state of the current branch (see [projection.md](projection.md#status)), the provenance stored in the application record and the provider and model the selection carried. |
 | `/prefill preview <id>` | Shows the metadata and both message bodies of a profile, escaped. |
 | `/prefill reload` | Reads the catalog and the library configuration again. It applies nothing. |
 
-No subcommand sends a message to the model, starts a generation, or writes to the profile library or `prefills/config.json`. Only Create and Edit in the TUI menu write profiles; they do not change the configuration.
+No subcommand sends a message to the model, starts a generation, or writes to the profile library or `prefills/config.json`. Only Create and Edit in the TUI menu write profiles, and only Manage bindings writes the configuration; no other action writes either.
 
 ## Argument grammar
 
@@ -66,13 +66,17 @@ A bare `/prefill` in the TUI always offers these seven actions, even when the li
 - How to add a profile
 - Close
 
-When the host provides input and editor dialogs, the TUI also offers **Create a profile** and **Edit a profile**. Create asks for an id, name, description and both example messages; Edit lets you change the labels or either message, starting from the current value. Cancelling before saving writes nothing. The revision recorded for an application is a digest of the three profile files, so any edit changes it and a session that already applied the profile stops sending the example, even when only the name or the description changed.
+When Pi provides a model registry, the menu also offers **Automatic: bindings and default**, after Choose, and **Manage bindings**, after it. When the host provides input and editor dialogs, it also offers **Create a profile** and **Edit a profile**. With both conditions met the menu lists eleven actions. Create asks for an id, name, description and both example messages; Edit lets you change the labels or either message, starting from the current value. Cancelling before saving writes nothing. The revision recorded for an application is a digest of the three profile files, so any edit changes it and a session that already applied the profile stops sending the example, even when only the name or the description changed.
+
+**Automatic: bindings and default** deletes `selection.json`, so the library decides: a matching binding, else the configured default. It is the only way back to that state from the menu. The notice says that the automatic selection was recorded, and a state file that cannot be read is reported and left as it is.
+
+**Manage bindings** opens a list with the current rules, each shown as `provider · any model → profileId` or `provider · model → profileId`, plus **Add a binding**, **Remove a binding** and **Back to the menu**. Add asks for a profile, then a provider from Pi's model registry, then one model of that provider or `(any model of <provider>)` for the provider rule. A provider without credentials is marked `(no credentials)` and is still offered, because the rule can be written before it is authenticated. Remove lists the rules and deletes the chosen one. Both return to the rule list and report the result. Add writes a version 2 `config.json` with a generated rule identifier, and Remove rewrites the list without that rule; the limits and failure reasons are in [profile-format.md](profile-format.md#writing-the-configuration). Saving a rule does not change the recorded choice: the notice asks for Automatic so that the rules decide the next session. The menu summary shows up to five rules.
 
 The TUI menu uses a custom searchable list with a highlighted title and a muted summary showing the pending choice or recorded disable, the library state and the library folder. If custom UI is unavailable or the menu is called in another mode, it falls back to the host's select dialog.
 
 Choose and Preview open a second dialog with entries in the form `id: name — description`. Its `Back to the menu` entry returns to the main menu. With no valid profiles, either action shows a notice instead of opening a second dialog.
 
-Only Create and Edit write to the library. They resolve the library root through links, as the reader does, and reject a profile folder that is a link and any write target that is a link. They validate the format and byte limits before writing, replace each file through a temporary file and rename, then reload the catalog to check the result. Creation is not a three-file transaction: a failed or interrupted save may leave a partial profile. Same-user filesystem changes between checks are not prevented. Choosing a profile or turning prefill off records the choice outside the library, as described in [Recorded state](#recorded-state).
+Only Create, Edit and Manage bindings write files: profiles, and the library configuration. The profile writes resolve the library root through links, as the reader does, and reject a profile folder that is a link and any write target that is a link. They validate the format and byte limits before writing, replace each file through a temporary file and rename, then reload the catalog to check the result. Creation is not a three-file transaction: a failed or interrupted save may leave a partial profile. Same-user filesystem changes between checks are not prevented. Choosing a profile or turning prefill off records the choice outside the library, as described in [Recorded state](#recorded-state).
 
 ## PI_PREFILL_OFF
 
@@ -150,11 +154,11 @@ The choice is stored in `<agent-dir>/pi-assistant-prefill/selection.json`, outsi
 
 - `profileId` is a valid identifier or `null`.
 - `disabled` is a boolean. `true` requires `profileId` to be `null`.
-- A missing file or directory means no choice.
+- A missing file or directory means no choice, and the menu shows it as `Choice: automatic`.
 - Any other problem is a diagnostic: invalid JSON, duplicate keys, unknown or missing fields, a schema version other than `1`, a link that leads outside the directory, or a conflicting combination. The subcommands that change the state read it first and refuse to replace it. The file is left as it is.
 - Writes go to a temporary file in the same directory, which is then renamed over `selection.json`. The previous file is not deleted first. The directory is created on the first write.
 
-The state format has its own version, separate from the profile format in [profile-format.md](profile-format.md).
+The state format has its own version, separate from the profile format in [profile-format.md](profile-format.md). This file never holds bindings: the rules live in the library configuration, and the menu summary lists them when no choice is recorded. `/prefill reload` reports the configured default, not the rules.
 
 ## Operational size threshold
 

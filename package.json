@@ -34,7 +34,7 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "test": "node --test test/profiles.test.ts test/config.test.ts test/agent-dir.test.ts test/selection.test.ts test/selector.test.ts test/status.test.ts test/session-state.test.ts test/projection.test.ts",
+    "test": "node --test test/profiles.test.ts test/config.test.ts test/config-writer.test.ts test/agent-dir.test.ts test/selection.test.ts test/selector.test.ts test/status.test.ts test/session-state.test.ts test/projection.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "biome lint .",
     "format:check": "biome format .",
