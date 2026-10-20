@@ -1,6 +1,6 @@
 {
   "name": "pi-assistant-prefill",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Selectable conversation examples for Pi: choose a local profile and apply it to a new eligible session.",
   "keywords": [
     "pi-package",

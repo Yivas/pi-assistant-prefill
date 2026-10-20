@@ -2,7 +2,7 @@
 
 This document describes the profile library, its configuration and the resolution rules. The profile format is version 1; the configuration is version 2, and version 1 is still read. The TUI menu creates and edits profiles in this format, and its Manage bindings action is the only code in the package that writes the library configuration; loading, resolution and the other commands keep the library read-only.
 
-Status: implemented as a library with tests and read by the `/prefill` command (see [selector.md](selector.md)). It ships inside the published package `pi-assistant-prefill`, installed with `pi install npm:pi-assistant-prefill@0.1.1`. The command's automated tests do not start Pi; one manual run against Pi 1.1.0 on Windows with Node.js 24.9.0 is described in [selector.md](selector.md). No real model provider was tested: the application was checked against local doubles of the Anthropic messages and OpenAI-compatible chat completions endpoints, as [compatibility.md](compatibility.md) records.
+Status: implemented as a library with tests and read by the `/prefill` command (see [selector.md](selector.md)). It ships inside the published package `pi-assistant-prefill`, installed with `pi install npm:pi-assistant-prefill@0.1.2`. The command's automated tests do not start Pi; one manual run against Pi 1.1.0 on Windows with Node.js 24.9.0 is described in [selector.md](selector.md). No real model provider was tested: the application was checked against local doubles of the Anthropic messages and OpenAI-compatible chat completions endpoints, as [compatibility.md](compatibility.md) records.
 
 All examples use synthetic data. The `brief-example` profile below is a placeholder, not a model prompt or a recommended example.
 
